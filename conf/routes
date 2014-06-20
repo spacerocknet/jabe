@@ -1,0 +1,22 @@
+# Routes
+# This file defines all application routes (Higher priority routes first)
+# ~~~~
+
+# Home page
+GET     /                           @controllers.Application.index
+
+
+# JSON
+GET     /v1/quiz/config                controllers.Quiz.config
+GET     /v1/quiz/categories            controllers.Quiz.categories
+GET     /v1/quiz/quan/:cat/:qid             controllers.Quiz.details(cat: String, qid: Long)
+
+POST    /v1/quiz/request               controllers.Quiz.quizRequest
+POST    /v1/quiz/result                controllers.Quiz.gameResult
+POST    /v1/quiz/save                  controllers.Quiz.save
+POST    /v1/quiz/savetest              controllers.Quiz.savetest
+
+GET     /v1/fbregister                 controllers.SubscriberController.fbRegister()
+
+# Map static resources from the /public folder to the /assets URL path
+GET     /assets/*file               controllers.Assets.at(path="/public", file)
