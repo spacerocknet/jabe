@@ -5,16 +5,16 @@ import scala.util.Random
 import play.api.mvc._
 import play.api.mvc.Controller
 
-import models.QuizRequest
-import models.GameResult
-import models.QuAn
-
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
 import play.api.Logger
 
+import models.QuizRequest
+import models.GameResult
+import models.QuAn
 
-object Quiz extends Controller {
+
+object QuizConttroller extends Controller {
 
   val json = Json.obj(
         "key1" -> "value1",
@@ -151,7 +151,7 @@ object Quiz extends Controller {
   def save = Action(parse.json) { request =>
     println(request);
     println(request.headers)
-    println(request.headers.get("Authorization").getOrElse("minh"))
+    println(request.headers.get("Authorization").getOrElse("NoAuthorization"))
     Logger.info("start")
     try {
       val quanJson = request.body

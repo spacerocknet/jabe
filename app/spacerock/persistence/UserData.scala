@@ -1,6 +1,4 @@
-package com.spacerock.persistence
-
-
+package spacerock.persistence
 
 import java.util.Date
 import java.util.Random;
@@ -28,11 +26,19 @@ import com.netflix.astyanax.serializers.StringSerializer
 import com.netflix.astyanax.thrift.ThriftFamilyFactory
 
 
+import scaldi.{Injectable, Injector}
 
-class UserDataDAO {
-     
+trait UserDataDAO {
+  def insertRandom() : Unit
+  def insertNewUser(uuid : String) : Boolean
+}
+
+
+class SubscriberDataDAO(implicit inj: Injector) extends UserDataDAO with Injectable {
+    val cluster = inject [String] (identified by "cassandra.cluster")   
+  
     val context = new AstyanaxContext.Builder()
-               .forCluster("Test Cluster")
+               .forCluster(cluster)
                .forKeyspace("spacerock")
                .withAstyanaxConfiguration(new AstyanaxConfigurationImpl()      
                                            .setDiscoveryType(NodeDiscoveryType.RING_DESCRIBE))
@@ -61,10 +67,20 @@ class UserDataDAO {
          .putColumn("col2", "val2", null)
          .putColumn("col3", "val3", null)
      
-
        val result = m.execute() //OperationResult<Void>
-       
     }
 
+    def insertNewUser(uuid : String) : Boolean = {
+        val m:MutationBatch  = keyspace.prepareMutationBatch();
+        
+         m.withRow(CF, "uid." + uuid)
+          .putColumn("platform", "IOS", null)
+          .putColumn("version", "5", null)
+          .putColumn("Country", "US", null)
+          .putColumn("IP", "127.0.0.1", null)
+          
+        m.execute()  
+        true
+    }
     
 }
