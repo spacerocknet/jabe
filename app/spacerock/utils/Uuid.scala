@@ -21,8 +21,9 @@ class UuidMacBasedGenerator(implicit inj: Injector) extends UuidGenerator with I
     
     def init() : Unit = {
       try {
-        val ip = InetAddress.getLocalHost()
-        Logger.info("ip: " + ip);
+        var ip = InetAddress.getLocalHost()
+        
+        //Logger.info("ip: " + ip);
         //val network = NetworkInterface.getByInetAddress(ip)
         //Logger.info("netowkr : " + network)
         
@@ -36,6 +37,7 @@ class UuidMacBasedGenerator(implicit inj: Injector) extends UuidGenerator with I
         //}
         //machineMac = sb.toString()
         machineMac = ip.toString()
+        machineMac = machineMac.replaceAll("/","")
       } catch {
          case e:Exception => {
            Logger.info("exception = %s" format e)

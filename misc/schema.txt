@@ -1,0 +1,64 @@
+create column family UserData
+  with column_type = 'Standard'
+  and comparator = 'UTF8Type'
+  and default_validation_class = 'BytesType'
+  and key_validation_class = 'UTF8Type'
+  and read_repair_chance = 0.0
+  and dclocal_read_repair_chance = 0.0
+  and populate_io_cache_on_flush = false
+  and gc_grace = 3456000
+  and min_compaction_threshold = 4
+  and max_compaction_threshold = 32
+  and replicate_on_write = true
+  and compaction_strategy = 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy'
+  and caching = 'KEYS_ONLY'
+  and comment = 'User Data Records';
+
+create column family UserIndex
+  with column_type = 'Standard'
+  and comparator = 'UTF8Type'
+  and default_validation_class = 'BytesType'
+  and key_validation_class = 'UTF8Type'
+  and read_repair_chance = 0.0
+  and dclocal_read_repair_chance = 0.0
+  and populate_io_cache_on_flush = false
+  and gc_grace = 3456000
+  and min_compaction_threshold = 4
+  and max_compaction_threshold = 32
+  and replicate_on_write = true
+  and compaction_strategy = 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy'
+  and caching = 'KEYS_ONLY'
+  and comment = 'User Index Records';
+  
+  
+create column family game_session_tracker
+  with column_type = 'Standard'
+  and comparator = 'UTF8Type'
+  and default_validation_class = 'BytesType'
+  and key_validation_class = 'UTF8Type'
+  and read_repair_chance = 0.1
+  and dclocal_read_repair_chance = 0.0
+  and populate_io_cache_on_flush = false
+  and gc_grace = 3456000
+  and min_compaction_threshold = 4
+  and max_compaction_threshold = 32
+  and replicate_on_write = true
+  and compaction_strategy = 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy'
+  and caching = 'KEYS_ONLY'
+  and comment = 'Tracking of game sessions. ';  
+  
+  
+create column family account_billing_tracker
+  with column_type = 'Standard'
+  and comparator = 'UTF8Type'
+  and default_validation_class = 'BytesType'
+  and key_validation_class = 'UTF8Type'
+  and read_repair_chance = 0.0
+  and dclocal_read_repair_chance = 0.0
+  and populate_io_cache_on_flush = false
+  and gc_grace = 3456000
+  and min_compaction_threshold = 4
+  and max_compaction_threshold = 32
+  and replicate_on_write = true
+  and compaction_strategy = 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy'
+  and caching = 'KEYS_ONLY';

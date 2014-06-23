@@ -47,6 +47,7 @@ object QuizConttroller extends Controller {
                       "Geographies",
                       "Musics"
                   )
+                  
         Ok(json)
   }
 
