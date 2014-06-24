@@ -1,0 +1,1 @@
+set AppsConfig['asteroid']['categories'] = 'Movies,Sports,Geographies,Musics';

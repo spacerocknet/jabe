@@ -7,14 +7,14 @@ GET     /                              @controllers.Application.index
 
 
 # JSON
-GET     /v1/quiz/config                controllers.QuizConttroller.config
-GET     /v1/quiz/categories            controllers.QuizConttroller.categories
-GET     /v1/quiz/quan/:cat/:qid        controllers.QuizConttroller.details(cat: String, qid: Long)
+GET     /v1/quiz/config                @controllers.QuizController.config
+GET     /v1/quiz/categories            @controllers.QuizController.categories
+GET     /v1/quiz/quan/:cat/:qid       @controllers.QuizController.details(cat: String, qid: Long)
 
-POST    /v1/quiz/request               controllers.QuizConttroller.quizRequest
-POST    /v1/quiz/result                controllers.QuizConttroller.gameResult
-POST    /v1/quiz/save                  controllers.QuizConttroller.save
-POST    /v1/quiz/savetest              controllers.QuizConttroller.savetest
+POST    /v1/quiz/request               @controllers.QuizController.quizRequest
+POST    /v1/quiz/result                @controllers.QuizController.gameResult
+POST    /v1/quiz/save                  @controllers.QuizController.save
+
 
 #Subscriber
 GET     /v1/subscribe/uuid              @controllers.SubscriberController.generateUniqId()
