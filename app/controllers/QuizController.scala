@@ -1,5 +1,8 @@
 package controllers
 
+import scala.collection.mutable.MutableList
+import scala.collection.JavaConversions._
+
 import play.api.Logger
 import play.api.libs.json._
 import play.api.mvc._
@@ -41,6 +44,8 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
                    )
   
   def categories = Action {
+       val appsConfig = appsConfigDao.getAppsConfiguration("asteroid")
+       println("categories:::: " + appsConfig.categories)
        val json = Json.arr(
                       "Movies",
                       "Sports",
@@ -52,6 +57,16 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
   }
 
   def config = Action {
+     val appsConfig = appsConfigDao.getAppsConfiguration("asteroid")
+     val categories = appsConfig.categories.split(",")
+     var list = MutableList[String]()
+     categories.foreach( i => list += i)
+    
+     val jsonConfig = Json.obj(
+                      "categories" -> Json.toJson(list),
+                      "battles_per_game" -> 6
+                   )
+                   
      Ok(jsonConfig)
   }
   
