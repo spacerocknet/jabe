@@ -82,14 +82,16 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
        println(request.body)
        println(json)
        val userId = (json.getOrElse(null) \ "userId").asOpt[String].getOrElse("")
-       val category = (json.getOrElse(null) \ "category").asOpt[String].getOrElse("Movies")
+       var category = (json.getOrElse(null) \ "category").asOpt[String].getOrElse("Movies")
        val num = (json.getOrElse(null) \ "num").asOpt[Int].getOrElse(1)
       
        println("userId: " + userId)
        println("category: " + category)
        println("num: " + num)
-       
-       if (!QuAn.getQuestions.contains(category)) {
+     
+       category = QuAn.normalizeCat(category)
+
+       if (!QuAn.hasDataForCategory(category)) {       
          Ok(JsArray())
        } else {
          val r: Random = new Random()
@@ -102,8 +104,9 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
             var q = subSet(index) 
             var jsonObj = Json.obj("category" -> q.category,
                                    "qid" -> q.qid,
-                                   "questions" -> q.question,
-                                   "answers" -> Json.arr(q.correctAns, q.ans1, q.ans2, q.ans3)
+                                   "question" -> q.question,
+                                   "answers" -> Json.arr(q.correctAns, q.ans1, q.ans2, q.ans3),
+                                   "df" -> JsNumber(q.df)
                                   )
             seq = seq:+ jsonObj
          }
@@ -117,7 +120,6 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
         BadRequest("Invalid EAN")
       }
     }
-    //Ok(result)
     
   }
 
@@ -167,19 +169,20 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
       val ans1 = (json.getOrElse(null) \ "ans1").asOpt[String].getOrElse("")
       val ans2 = (json.getOrElse(null) \ "ans2").asOpt[String].getOrElse("")
       val ans3 = (json.getOrElse(null) \ "ans3").asOpt[String].getOrElse("")
-      
+      val df : Int   = (json.getOrElse(null) \ "df").asOpt[Int].getOrElse(0) 
      
       println("qid: " + qid)
       println("category: " + category)
+      println("df: " + df)
       
-      QuAn.save(new QuAn(qid, category, question, correctAns, ans1, ans2, ans3))      
+      QuAn.save(new QuAn(qid, category, question, correctAns, ans1, ans2, ans3, df))      
       Ok("Ok")
     }
     catch {
       //case e:IllegalArgumentException => BadRequest("Product not found")
       case e:Exception => {
         Logger.info("exception = %s" format e)
-        BadRequest("Invalid EAN")
+        BadRequest("Invalid Input")
       }
     }
   }
@@ -200,7 +203,8 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
            "correctAns" -> Json.toJson(quan.correctAns),
            "ans1" -> Json.toJson(quan.ans1),
            "ans2" -> Json.toJson(quan.ans2),
-           "ans3" -> Json.toJson(quan.ans3)
+           "ans3" -> Json.toJson(quan.ans3),
+           "df" -> Json.toJson(quan.df)
          )
     
       Ok(json)
