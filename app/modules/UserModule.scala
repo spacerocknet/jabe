@@ -13,4 +13,11 @@ class UserModule extends Module {
   bind [UuidGenerator] to new UuidMacBasedGenerator
   
   bind [TAppsConfig] to new AppsConfigDAO
+
+  bind [NewUserData] to new NewUserDataDAO
+
+  bind [NewCategory] to new NewCategoryDAO
+
+  bind [NewQuiz] to new NewQuizDAO
+
 }

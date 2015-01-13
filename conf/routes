@@ -3,23 +3,39 @@
 # ~~~~
 
 # Home page
-GET     /                              @controllers.Application.index
+GET         /                                   @controllers.Application.index
 
+GET         /all                                @controllers.Application.getAllUser
+POST        /uid                                @controllers.Application.getUserInfoByUID
+POST        /uname                              @controllers.Application.getUserInfoByUsername
+POST        /newuser                            @controllers.Application.addNewUser
 
 # JSON
-GET     /v1/quiz/config                @controllers.QuizController.config
-GET     /v1/quiz/quan/:cat/:qid        @controllers.QuizController.details(cat: String, qid: Long)
+GET         /v1/quiz/config                     @controllers.QuizController.config
+GET         /v1/quiz/quan/:cat/:qid             @controllers.QuizController.details(cat: String, qid: Long)
 
-POST    /v1/quiz/request               @controllers.QuizController.quizRequest
-POST    /v1/quiz/result                @controllers.QuizController.gameResult
-POST    /v1/quiz/save                  @controllers.QuizController.save
+POST        /v1/quiz/request                    @controllers.QuizController.quizRequest
+POST        /v1/quiz/result                     @controllers.QuizController.gameResult
+POST        /v1/quiz/save                       @controllers.QuizController.save
 
 
 #Subscriber
-GET     /v1/subscribe/uuid              @controllers.SubscriberController.generateUniqId()
-POST    /v1/subscribe/noinforegister    @controllers.SubscriberController.noInfoRegister()
-GET     /v1/subcribe/fbregister         @controllers.SubscriberController.fbRegister()
-POST    /v1/subscribe/profile           @controllers.SubscriberController.getUserProfile()
+GET         /v1/subscribe/uuid                  @controllers.SubscriberController.generateUniqId()
+POST        /v1/subscribe/noinforegister        @controllers.SubscriberController.noInfoRegister()
+GET         /v1/subcribe/fbregister             @controllers.SubscriberController.fbRegister()
+POST        /v1/subscribe/profile               @controllers.SubscriberController.getUserProfile()
 
 # Map static resources from the /public folder to the /assets URL path
-GET     /assets/*file                  controllers.Assets.at(path="/public", file)
+GET         /assets/*file                       controllers.Assets.at(path="/public", file)
+
+# Quiz
+GET         /v2/quiz/all                        @controllers.Application.getAllQuiz
+POST        /v2/quiz/cat                        @controllers.Application.getQuizByCategory
+POST        /v2/quiz/qid                        @controllers.Application.getQuizById
+POST        /v2/quiz/add                        @controllers.Application.addNewQuiz
+POST        /v2/quiz/update                     @controllers.Application.updateQuiz
+# Category
+GET         /v2/category/all                    @controllers.Application.getAllCategory
+POST        /v2/category/name                   @controllers.Application.getCategoryByName
+POST        /v2/category/update                 @controllers.Application.updateCategory
+POST        /v2/category/add                    @controllers.Application.addCategory

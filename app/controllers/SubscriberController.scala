@@ -10,8 +10,6 @@ import scaldi.Injector
 import spacerock.persistence.UserDataDAO
 import spacerock.utils.UuidGenerator
 
-
-
 class SubscriberController(implicit inj: Injector) extends Controller with Injectable {
   val subscriberDataDao = inject [UserDataDAO]
   val uuidGenerator = inject [UuidGenerator]
