@@ -11,60 +11,86 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
   val gameConfig = inject[GameConfig]
   val gResult = inject[GameResult]
 
-  def gameInfo = Action { request =>
-    val json: Option[JsValue] = request.body.asJson
-    val gameId: Int = (json.getOrElse(null) \ "game-id").asOpt[Int].getOrElse(0)
-
+  def gameInfo (gameId: Int) = Action {
+    printf("ID: " + gameId)
      val game: Game = gameConfig.getGameInfoByGid(gameId)
-
-     val gameString = Json.obj(
-                      "game_name" -> game.gameName,
-                      "game_descrption" -> game.gameDescription,
-                      "categories" -> Json.toJson(game.categories),
-                      "battles_per_game" -> 6
-                   )
-                   
-     Ok(gameString)
+     if (game != null) {
+       val gameString = Json.obj(
+                        "game_name" -> game.gameName,
+                        "game_description" -> game.gameDescription,
+                        "categories" -> Json.toJson(game.categories),
+                        "battles_per_game" -> game.bpg
+                     )
+                     
+       Ok(gameString)
+    } else {
+       Ok("{}")
+     }
   }
 
-  def gameInfoByName = Action { request =>
-    val json: Option[JsValue] = request.body.asJson
-    val gameName: String = (json.getOrElse(null) \ "game-name").asOpt[String].getOrElse("asteroid")
+  def gameInfoByName (gameName : String) = Action {
 
     val game: Game = gameConfig.getGameInfoByName(gameName)
+    println(gameName)
+    if (game != null) {
+      val gameString = Json.obj(
+        "game_name" -> game.gameName,
+        "game_description" -> game.gameDescription,
+        "categories" -> Json.toJson(game.categories),
+        "battles_per_game" -> game.bpg
+      )
+      Ok(gameString)
+    } else {
+      Ok("{}")
+    }
 
-    val gameString = Json.obj(
-      "game_name" -> game.gameName,
-      "game_descrption" -> game.gameDescription,
-      "categories" -> Json.toJson(game.categories),
-      "battles_per_game" -> 6
-    )
 
-    Ok(gameString)
   }
 
-   def gameResult = Action { request =>
-    println(request);
-    println(request.headers)
-    println(request.headers.get("Authorization").getOrElse("NoAuthorization"))
-
+  // overwrite result list
+  def gameNewResult = Action { request =>
     try {
       val json: Option[JsValue] = request.body.asJson
-      println("Body ::: ")
-      println(request.body)
-      println(json)
-      val uid = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")
-      val result = (json.getOrElse(null) \ "result").asOpt[String].getOrElse("0")
 
-      println("userId: " + uid)
-      println("result: " + result)
+      val uid = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")
+      val results = (json.getOrElse(null) \ "results").asOpt[String].getOrElse("")
+
       if (uid != "") {
-        val res = result.split("\\\\s+")
+        val res = results.split("\\s+")
         val r = gResult.addGameResults(uid, res.toList)
         if (r)
           Ok("status: \"Ok\"")
         else
-          Ok("status: \"Something went wrong\"")
+          ServiceUnavailable("Service is currently unavailable")
+      }
+      Ok("Ok")
+    }
+    catch {
+      //case e:IllegalArgumentException => BadRequest("Product not found")
+      case e:Exception => {
+        Logger.info("exception = %s" format e)
+        BadRequest("Invalid EAN")
+      }
+    }
+  }
+
+  // add to result list, not overwrite
+  def gameResult = Action { request =>
+    try {
+      val json: Option[JsValue] = request.body.asJson
+
+      val uid = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")
+      val results = (json.getOrElse(null) \ "results").asOpt[String].getOrElse("")
+
+      if (uid != "") {
+        val res = results.split("\\s+")
+        println(res.length)
+        val r = gResult.addMoreGameResults(uid, res.toList)
+        if (r)
+          Ok("status: \"Ok\"")
+        else {
+            ServiceUnavailable("Service is currently unavailable")
+        }
 
       }
       Ok("Ok")
@@ -76,5 +102,29 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
         BadRequest("Invalid EAN")
       }
     }
-  } 
+  }
+
+  def getResult (uid : String) = Action {
+
+    val res: List[String] = gResult.getGameResults(uid)
+    println(uid)
+    if (uid != null) {
+      if (res == null) {
+        ServiceUnavailable("Service is currently unavailable")
+      }
+      val sb: StringBuilder = new StringBuilder
+      for (i <- 0 until res.length - 2) {
+        println(res(i))
+        sb.append(res(i))
+      }
+      sb.append(res(res.length - 1))
+      val gameString = Json.obj(
+        "results" -> sb.toString()
+      )
+      Ok(gameString)
+    } else {
+      Ok("{}")
+    }
+  }
+
 }

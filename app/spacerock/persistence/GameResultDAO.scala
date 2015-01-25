@@ -1,6 +1,7 @@
 package spacerock.persistence
 
 import com.datastax.driver.core._
+import play.Logger
 import scaldi.{Injectable, Injector}
 
 import scala.collection.JavaConversions._
@@ -24,6 +25,10 @@ class GameResultDAO  (implicit inj: Injector) extends GameResult with Injectable
 
   def addGameResults(uid: String, gameResults: List[String]): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddGameResults", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return false
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("uid", uid)
     bs.setList("results", gameResults)
@@ -32,8 +37,12 @@ class GameResultDAO  (implicit inj: Injector) extends GameResult with Injectable
   }
   def getGameResults(uid: String): List[String] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetResultsByUid", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return null
+    }
     val bs: BoundStatement = new BoundStatement(ps)
-    bs.setString(1, uid)
+    bs.setString(0, uid)
     val result: ResultSet = session.execute(bs)
     val l: scala.collection.mutable.ListBuffer[String] = scala.collection.mutable.ListBuffer()
     for (row <- result.all()) {
@@ -46,6 +55,10 @@ class GameResultDAO  (implicit inj: Injector) extends GameResult with Injectable
   }
   def addMoreGameResults(uid: String, gameResults: List[String]): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddMoreResults", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return false
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setList(0, gameResults)
     bs.setString(1, uid)
@@ -77,8 +90,7 @@ class GameResultDAO  (implicit inj: Injector) extends GameResult with Injectable
     pStatements.put("AddGameResults", ps)
 
     // Add more results
-    ps = session.prepare("UPDATE spacerock.game_result SET results = results + ? " +
-      "WHERE uid = ?;")
+    ps = session.prepare("UPDATE spacerock.game_result SET results = results + ? WHERE uid = ?;")
     pStatements.put("AddMoreResults", ps)
 
     // Get game result by uid

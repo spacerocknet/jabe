@@ -4,6 +4,7 @@ import java.util.UUID
 
 import com.datastax.driver.core._
 import models.{Game}
+import play.Logger
 import scaldi.{Injectable, Injector}
 import scala.collection.JavaConversions._
 
@@ -33,8 +34,11 @@ class GameConfigDAO (implicit inj: Injector) extends GameConfig with Injectable 
   val isConnected: Boolean = connect("127.0.0.1")
 
   def getGameInfoByGid(gid: Int): Game = {
-    val ps: PreparedStatement = pStatements.get("GetQuizByQid").getOrElse(null)
-
+    val ps: PreparedStatement = pStatements.get("GetGameInfoById").getOrElse(null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return null
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setInt("gid", gid)
     val result: ResultSet = session.execute(bs)
@@ -43,14 +47,18 @@ class GameConfigDAO (implicit inj: Injector) extends GameConfig with Injectable 
       val game: Game = new Game(row.getInt("gid"), row.getString("game_name"), row.getString("game_description"),
         row.getList("categories", classOf[String]).toList,
         row.getInt("battles_per_game"))
-      game
+      return game
     } else {
-      null
+      return null
     }
   }
-  def getGameInfoByName(gName: String): Game = {
-    val ps: PreparedStatement = pStatements.get("GetQuizByQid").getOrElse(null)
 
+  def getGameInfoByName(gName: String): Game = {
+    val ps: PreparedStatement = pStatements.get("GetGameInfoByName").getOrElse(null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return null
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("game_name", gName)
     val result: ResultSet = session.execute(bs)
@@ -70,7 +78,10 @@ class GameConfigDAO (implicit inj: Injector) extends GameConfig with Injectable 
   def addGameInfo(gid: Int, gameName: String, gameDescription: String, categories: List[String],
                   bgp: Int): Boolean = {
     val ps: PreparedStatement = pStatements.get("AddGameInfo").getOrElse(null)
-
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return false
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setInt("gid", gid)
     bs.setString("game_name", gameName)
@@ -89,6 +100,10 @@ class GameConfigDAO (implicit inj: Injector) extends GameConfig with Injectable 
 
   def getAllGames(): List[Game] = {
     val ps: PreparedStatement = pStatements.get("GetAllGames").getOrElse(null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return null
+    }
 
     val bs: BoundStatement = new BoundStatement(ps)
     val result: ResultSet = session.execute(bs)

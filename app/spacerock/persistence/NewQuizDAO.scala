@@ -2,6 +2,7 @@ package spacerock.persistence
 
 import com.datastax.driver.core._
 import models.{QuAn}
+import play.Logger
 import scaldi.{Injectable, Injector}
 import scala.collection.JavaConversions._
 /**
@@ -30,6 +31,10 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
   override def updateQuiz(qid: Long, category: String, question: String, rightAnswer: String,
                            ans1: String, ans2: String, ans3: String, df: Int): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateQuiz", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return false
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString(0, category)
     bs.setString(1, question)
@@ -48,6 +53,10 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
   override def addNewQuiz(qid: Long, category: String, question: String, rightAnswer: String,
                           ans1: String, ans2: String, ans3: String, df: Int): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddNewQuiz", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return false
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setLong(0, qid)
     bs.setString(1, category)
@@ -64,7 +73,10 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
 
   override def getQuizByQid(qid: Long): QuAn = {
     val ps: PreparedStatement = pStatements.get("GetQuizByQid").getOrElse(null)
-
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return null
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setLong("qid", qid)
     val result: ResultSet = session.execute(bs)
@@ -83,7 +95,10 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
 
   override def getQuizzesByCategory(category: String): List[QuAn] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetQuizzesByCategory", null)
-
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return null
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString(0, category)
     bs.setInt(1, 2)
@@ -100,7 +115,10 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
 
   override def getAllQuizzes(): List[QuAn] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetAllQuizzes", null)
-
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return null
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     val result: ResultSet = session.execute(bs)
     val l: scala.collection.mutable.ListBuffer[QuAn] = scala.collection.mutable.ListBuffer()

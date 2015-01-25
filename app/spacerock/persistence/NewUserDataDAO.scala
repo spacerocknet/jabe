@@ -4,6 +4,7 @@ import java.util.UUID
 
 import com.datastax.driver.core._
 import models.Subscriber
+import play.Logger
 import scala.collection.JavaConversions._
 import scaldi.{Injectable, Injector}
 
@@ -16,7 +17,7 @@ trait NewUserData {
   def getUserInfoByUsername(userName: String): Subscriber
   def addUserBasicInfo(uid: String, userName: String, firstName: String, lastName: String,
                       email: String, fbId: String, locState: String, locRegion: String,
-                      appName: String): Boolean
+                      locCountry: String, appName: String): Boolean
   def addDeviceInfo(uid: String, platform: String, os: String, model: String, phone: String, deviceUuid: String): Boolean
   def addDeviceInfo(subscriber: Subscriber): Boolean
   def updateLastSeenField(uuid: String): Boolean
@@ -35,6 +36,10 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
 
   override def updateLastSeenField(uuid: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateLastSeen", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return false
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("uid", uuid)
     bs.setLong("last_seen", System.currentTimeMillis())
@@ -44,8 +49,12 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
 
   override def addUserBasicInfo (uid: String, userName: String, firstName: String, lastName: String,
                                    email: String, fbId: String, locState: String, locRegion: String,
-                                   appName: String): Boolean = {
+                                   locCountry: String, appName: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddUserInfo", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return false
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     val time: Long = System.currentTimeMillis()
     bs.setString("uid", uid)
@@ -54,9 +63,10 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
     bs.setString("last_name", lastName)
     bs.setString("email", email)
     bs.setString("fb_id", fbId)
-    bs.setString("loc_state", locState)
-    bs.setString("loc_region", locRegion)
-    bs.setString("app_name", appName)
+    bs.setString("state", locState)
+    bs.setString("region", locRegion)
+    bs.setString("country", locCountry)
+    bs.setString("apps", appName)
     bs.setLong("last_seen", time)
     bs.setLong("registered_time", time)
     session.execute(bs)
@@ -66,6 +76,10 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
   override def changeDevice(uid: String, platform: String, os: String, model: String,
                             phone: String, deviceUuid: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("ChangeDevice", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return false
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("uid", uid)
     bs.setString("device_uuid", deviceUuid)
@@ -80,6 +94,10 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
   override def addDeviceInfo(uid: String, platform: String, os: String, model: String,
                              phone: String, deviceUuid: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddDeviceInfo", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return false
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     val time: Long = System.currentTimeMillis()
     bs.setString("uid", uid)
@@ -94,49 +112,65 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
   }
 
   override def addDeviceInfo(subscriber: Subscriber): Boolean = {
-    addDeviceInfo(subscriber.uuid, subscriber.platform, subscriber.os, subscriber.model,
+    addDeviceInfo(subscriber.uid, subscriber.platform, subscriber.os, subscriber.model,
                   subscriber.phone, subscriber.deviceUuid)
   }
 
   override def getUserInfoByUID(uid: String): Subscriber = {
     val ps: PreparedStatement = pStatements.get("GetUserInfoByUID").orNull(null)
-
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return null
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("uid", uid)
     val result: ResultSet = session.execute(bs)
-    if (result.size < 1) {
-      new Subscriber("", "", "", "", "", "")
-    } else {
-      val row: Row = result.one()
-      val subscriber: Subscriber = new Subscriber(row.getUUID("uid").toString, row.getString("first_name"),
-        row.getString("last_name"), row.getString("user_name"),
-        row.getString("email"))
+    val row: Row = result.one()
+    if (row != null) {
+      val subscriber: Subscriber = new Subscriber(row.getString("uid"), row.getString("platform"),
+        row.getString("os"), row.getString("model"),
+        row.getString("phone"),row.getString("device_uuid"), row.getString("email"),
+        row.getString("fb_id"), row.getString("state"),
+        row.getString("region"), row.getString("country"), row.getString("apps"))
       subscriber
+    } else {
+      null
     }
   }
 
   def getUserInfoByUsername(userName: String): Subscriber = {
     val ps: PreparedStatement = pStatements.getOrElse("GetUserInfoByUsername", null)
-
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return null
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("user_name", userName)
     val result: ResultSet = session.execute(bs)
     val row: Row = result.one()
-    val subscriber: Subscriber = new Subscriber(row.getString("uid"), row.getString("first_name"),
-      row.getString("last_name"), row.getString("user_name"),
-      row.getString("email"))
+    val subscriber: Subscriber = new Subscriber(row.getString("uid"), row.getString("platform"),
+      row.getString("os"), row.getString("model"),
+      row.getString("phone"),row.getString("device_uuid"), row.getString("email"),
+      row.getString("fb_id"), row.getString("state"),
+      row.getString("region"), row.getString("country"), row.getString("apps"))
     subscriber
   }
 
   override def getAllUsers(): List[Subscriber] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetAllUsers", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return null
+    }
     val bs: BoundStatement = new BoundStatement(ps)
     val result: ResultSet = session.execute(bs)
     val l: scala.collection.mutable.ListBuffer[Subscriber] = scala.collection.mutable.ListBuffer()
-    for (e: Row <- result.all()) {
-      l.add(new Subscriber(e.getString("uid"), e.getString("first_name"),
-        e.getString("last_name"), e.getString("user_name"),
-        e.getString("email")))
+    for (row: Row <- result.all()) {
+      l.add(new Subscriber(row.getString("uid"), row.getString("platform"),
+        row.getString("os"), row.getString("model"),
+        row.getString("phone"),row.getString("device_uuid"), row.getString("email"),
+        row.getString("fb_id"), row.getString("state"),
+        row.getString("region"), row.getString("country"), row.getString("apps")))
     }
     l.toList
   }
@@ -170,8 +204,8 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
 
     // Add user information
     ps = session.prepare("UPDATE spacerock.users SET user_name = ?, first_name = ?, last_name = ?, " +
-      "email = ?, fb_id = ?, loc_state = ?, " +
-      "loc_region = ?, app_name = ?, registered_time = ?, last_seen = ? WHERE uid = ?;")
+      "email = ?, fb_id = ?, state = ?, " +
+      "region = ?, country = ?, apps = ?, registered_time = ?, last_seen = ? WHERE uid = ?;")
     pStatements.put("AddUserInfo", ps)
 
     // add device information

@@ -22,25 +22,53 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
 
   // get all user from database
 	def getAllUser = Action {
-	    val s: List[Subscriber] = userDao.getAllUsers()
-	    println(s)
-	    Ok(s.toString)
+    val result: List[Subscriber] = userDao.getAllUsers()
+    var seq = Seq[JsObject]()
+    for(subscriber <- result) {
+
+      val userString = Json.obj(
+        "uuid" -> (if (subscriber.uid == null) "" else subscriber.uid),
+        "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
+        "os" -> (if (subscriber.os == null) "" else subscriber.os),
+        "model" -> (if (subscriber.model == null) "" else subscriber.model),
+        "phone" -> (if (subscriber.phone == null) "" else subscriber.phone),
+        "email" -> (if (subscriber.email == null) "" else subscriber.email),
+        "fbId" -> (if (subscriber.fbId == null) "" else subscriber.fbId),
+        "state" -> (if (subscriber.state == null) "" else subscriber.state),
+        "region" -> (if (subscriber.region == null) "" else subscriber.region),
+        "country" -> (if (subscriber.country == null) "" else subscriber.country),
+        "apps" -> (if (subscriber.apps == null) "" else subscriber.apps))
+
+      seq = seq:+ userString
+    }
+    Ok(JsArray(seq))
 	}
 
   // get user by uid
-  def getUserInfoByUID = Action { request =>
+  def getUserInfoByUID (uid: String) = Action {
     try {
-      val json: Option[JsValue] = request.body.asJson
-      println(json)
-      val uidString = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse(null)
-      if (uidString != null) {
-        Ok(userDao.getUserInfoByUID(uidString).toString)
-      }
-      else {
-        BadRequest("Error")
+      val subscriber: Subscriber = userDao.getUserInfoByUID(uid)
+      if (subscriber != null) {
+        val userString = Json.obj(
+          "uuid" -> (if (subscriber.uid == null) "" else subscriber.uid),
+          "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
+          "os" -> (if (subscriber.os == null) "" else subscriber.os),
+          "model" -> (if (subscriber.model == null) "" else subscriber.model),
+          "phone" -> (if (subscriber.phone == null) "" else subscriber.phone),
+          "email" -> (if (subscriber.email == null) "" else subscriber.email),
+          "fbId" -> (if (subscriber.fbId == null) "" else subscriber.fbId),
+          "state" -> (if (subscriber.state == null) "" else subscriber.state),
+          "region" -> (if (subscriber.region == null) "" else subscriber.region),
+          "country" -> (if (subscriber.country == null) "" else subscriber.country),
+          "apps" -> (if (subscriber.apps == null) "" else subscriber.apps))
+
+        Ok(userString)
+      } else {
+        Ok("{}")
       }
     } catch {
       case e: Exception => {
+        e.printStackTrace()
         println("exception = %s" format e)
         BadRequest("Invalid EAN")
       }
@@ -48,17 +76,26 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
   }
 
   // get user by username
-  def getUserInfoByUsername = Action { request =>
+  def getUserInfoByUsername (userName: String) = Action {
     try {
-      val json: Option[JsValue] = request.body.asJson
-      println(json)
-      val userName = (json.getOrElse(null) \ "username").asOpt[String].getOrElse(null)
-      if (userName != null) {
+      val subscriber: Subscriber = userDao.getUserInfoByUsername(userName)
+      if (subscriber != null) {
+        val userString = Json.obj(
+          "uuid" -> (if (subscriber.uid == null) "" else subscriber.uid),
+          "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
+          "os" -> (if (subscriber.os == null) "" else subscriber.os),
+          "model" -> (if (subscriber.model == null) "" else subscriber.model),
+          "phone" -> (if (subscriber.phone == null) "" else subscriber.phone),
+          "email" -> (if (subscriber.email == null) "" else subscriber.email),
+          "fbId" -> (if (subscriber.fbId == null) "" else subscriber.fbId),
+          "state" -> (if (subscriber.state == null) "" else subscriber.state),
+          "region" -> (if (subscriber.region == null) "" else subscriber.region),
+          "country" -> (if (subscriber.country == null) "" else subscriber.country),
+          "apps" -> (if (subscriber.apps == null) "" else subscriber.apps))
 
-        Ok(userDao.getUserInfoByUsername(userName).toString)
-      }
-      else {
-        BadRequest("Error")
+        Ok(userString)
+      } else {
+        Ok("{}")
       }
     } catch {
       case e: Exception => {
@@ -69,25 +106,28 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
   }
 
   // add new user
-  def addUser = Action { request =>
+  def updateUserInfo = Action { request =>
     try {
       val json: Option[JsValue] = request.body.asJson
-      println(json)
-      val userName = (json.getOrElse(null) \ "username").asOpt[String].getOrElse(null)
-      val firstName = (json.getOrElse(null) \ "firstname").asOpt[String].getOrElse("")
-      val lastName = (json.getOrElse(null) \ "lastname").asOpt[String].getOrElse("")
+
+      val uid = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse(null)
+      val userName = (json.getOrElse(null) \ "user-name").asOpt[String].getOrElse(null)
+      val firstName = (json.getOrElse(null) \ "first-name").asOpt[String].getOrElse("")
+      val lastName = (json.getOrElse(null) \ "last-name").asOpt[String].getOrElse("")
       val email = (json.getOrElse(null) \ "email").asOpt[String].getOrElse("")
-      val fbId = (json.getOrElse(null) \ "fbid").asOpt[String].getOrElse("")
-      val locState = (json.getOrElse(null) \ "locstate").asOpt[String].getOrElse("")
-      val locRegion = (json.getOrElse(null) \ "locregion").asOpt[String].getOrElse("")
-      val appName = (json.getOrElse(null) \ "appname").asOpt[String].getOrElse("")
-      if (userName != null) {
+      val fbId = (json.getOrElse(null) \ "fb-id").asOpt[String].getOrElse("")
+      val locState = (json.getOrElse(null) \ "state").asOpt[String].getOrElse("")
+      val locRegion = (json.getOrElse(null) \ "region").asOpt[String].getOrElse("")
+      val locCountry = (json.getOrElse(null) \ "country").asOpt[String].getOrElse("")
+      val appName = (json.getOrElse(null) \ "apps").asOpt[String].getOrElse("")
+      if (uid != null) {
         //generate uuid
-        val uid: String = uuidGenerator.generate()
 
         userDao.addUserBasicInfo(uid, userName, firstName, lastName, email, fbId,
-                            locState, locRegion, appName)
-        Ok("\"uid\":\"" + uid.toString + "\"")
+                            locState, locRegion, locCountry, appName)
+        val userString = Json.obj(
+          "uuid" -> uid)
+        Ok(userString)
       }
       else {
         BadRequest("Error")
@@ -102,8 +142,6 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
 
   // add new user without user's information
   def addUserWithoutInfo = Action { request =>
-    var result = OkStatus
-
     try {
       val json: Option[JsValue] = request.body.asJson
 
@@ -111,12 +149,15 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
       val platform = (json.getOrElse(null) \ "platform").asOpt[String].getOrElse("")
       val phone = (json.getOrElse(null) \ "phone").asOpt[String].getOrElse("")
       val model = (json.getOrElse(null) \ "model").asOpt[String].getOrElse("")
-      val deviceUuid = (json.getOrElse(null) \ "deviceUuid").asOpt[String].getOrElse("")
-
-      val subscriber = new Subscriber(uuidGenerator.generate, platform, os, model, phone, deviceUuid)
+      val deviceUuid = (json.getOrElse(null) \ "device-uuid").asOpt[String].getOrElse("")
+      val uuid = uuidGenerator.generate
+      val subscriber = new Subscriber(uuid, platform, os, model, phone, deviceUuid)
       val status: Boolean = userDao.addDeviceInfo(subscriber)
       if (status) {
-        result = FailedStatus
+        val userString = Json.obj("uuid" -> uuid)
+        Ok(userString)
+      } else {
+        ServiceUnavailable("Service is currently unavailable")
       }
     } catch {
       case e:Exception => {
@@ -124,7 +165,6 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
         BadRequest("Internal server error")
       }
     }
-    Ok(result)
   }
 
   // add new user without user's information

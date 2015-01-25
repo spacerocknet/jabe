@@ -16,16 +16,17 @@ class CategoryController (implicit inj: Injector) extends Controller with Inject
     Ok(category.getAllCategories().toString())
   }
 
-  def getCategoryByName = Action { request =>
+  def getCategoryByName (catName: String) = Action {
     try {
-      val json: Option[JsValue] = request.body.asJson
-      val catName = (json.getOrElse(null) \ "category").asOpt[String].orNull(null)
-
       if (catName != null) {
         val cat: Category = category.getCategoryByName(catName)
-        val jsonObj = Json.obj("category" -> cat.category,
-          "description" -> cat.description)
-        Ok(jsonObj)
+        if (cat != null) {
+          val jsonObj = Json.obj("category" -> cat.category,
+            "description" -> cat.description)
+          Ok(jsonObj)
+        } else {
+          Ok("{}")
+        }
       } else {
         BadRequest("Error")
       }

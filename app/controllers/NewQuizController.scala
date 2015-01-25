@@ -29,27 +29,35 @@ class NewQuizController(implicit inj: Injector) extends Controller with Injectab
        val num = (json.getOrElse(null) \ "num").asOpt[Int].getOrElse(1)
 
        // check if the requested category does not exist
-       if (category.getCategoryByName(cat).category.equals("")) {
-         Ok(JsArray())
-       } else {
-         val r: Random = new Random()
+//       if (category.getCategoryByName(cat) == null) {
+//         Ok(JsArray())
+//       } else {
+       val r: Random = new Random()
          var seq = Seq[JsObject]()
          val questions: List[QuAn] = quiz.getQuizzesByCategory(cat)
-         for(i <- 0 until num) {
-            val index = Math.abs(r.nextInt()) % questions.size
-            val q = questions.get(index)
-            val jsonObj = Json.obj("category" -> q.category,
-                                   "qid" -> q.qid,
-                                   "question" -> q.question,
-                                   "answers" -> Json.arr(q.correctAns, q.ans1, q.ans2, q.ans3),
-                                   "df" -> JsNumber(q.df)
-                                  )
-            seq = seq:+ jsonObj
+       if (questions != null) {
+         for (i <- 0 until num) {
+           if (questions.size > 0) {
+             val index = Math.abs(r.nextInt()) % questions.size
+             val q = questions.get(index)
+             println(q)
+             val jsonObj = Json.obj("category" -> q.category,
+               "qid" -> q.qid,
+               "question" -> q.question,
+               "answers" -> Json.arr(q.correctAns, q.ans1, q.ans2, q.ans3),
+               "df" -> JsNumber(q.df)
+             )
+             println(jsonObj)
+             seq = seq :+ jsonObj
+           }
          }
-         Ok(JsArray(seq))
        }
+         Ok(JsArray(seq))
+
+//       }
     } catch {
       case e:Exception => {
+        e.printStackTrace()
         Logger.info("exception = %s" format e)
         BadRequest("Invalid EAN")
       }
@@ -80,21 +88,21 @@ class NewQuizController(implicit inj: Injector) extends Controller with Injectab
     }
   }
 
-  def getQuizById = Action { request =>
+  def getQuizById (qid: Long) = Action {
     try {
-      val json: Option[JsValue] = request.body.asJson
-      println(json)
-      val qid = (json.getOrElse(null) \ "qid").asOpt[Int].getOrElse(-1)
       if (qid >= 0) {
         val q: QuAn = quiz.getQuizByQid(qid)
-     
-        val jsonObj = Json.obj("category" -> q.category,
-                               "qid" -> q.qid,
-                               "question" -> q.question,
-                               "answers" -> Json.arr(q.correctAns, q.ans1, q.ans2, q.ans3),
-                               "df" -> JsNumber(q.df)
-                            )
-        Ok(jsonObj)
+        if (q != null) {
+          val jsonObj = Json.obj("category" -> q.category,
+            "qid" -> q.qid,
+            "question" -> q.question,
+            "answers" -> Json.arr(q.correctAns, q.ans1, q.ans2, q.ans3),
+            "df" -> JsNumber(q.df)
+          )
+          Ok(jsonObj)
+        } else {
+          Ok("{}")
+        }
       } else {
         BadRequest("Error")
       }
@@ -106,14 +114,11 @@ class NewQuizController(implicit inj: Injector) extends Controller with Injectab
     }
   }
 
-  def getQuizByCategory = Action { request =>
+  def getQuizByCategory (catName: String) = Action {
     try {
-      val json: Option[JsValue] = request.body.asJson
-      println(json)
-      val category = (json.getOrElse(null) \ "category").asOpt[String].getOrElse(null)
-      if (category != null) {
+      if (catName != null) {
         var seq = Seq[JsObject]()
-        val l: List[QuAn] = quiz.getQuizzesByCategory(category)
+        val l: List[QuAn] = quiz.getQuizzesByCategory(catName)
         for(q <- l) {
           val jsonObj = Json.obj("category" -> q.category,
                                  "qid" -> q.qid,
@@ -144,7 +149,7 @@ class NewQuizController(implicit inj: Injector) extends Controller with Injectab
       val qid: Long = (json.getOrElse(null) \ "qid").asOpt[Long].getOrElse(-1)
       val category = (json.getOrElse(null) \ "category").asOpt[String].getOrElse("")
       val question = (json.getOrElse(null) \ "question").asOpt[String].getOrElse("")
-      val rightAns = (json.getOrElse(null) \ "right_answer").asOpt[String].getOrElse("")
+      val rightAns = (json.getOrElse(null) \ "right-answer").asOpt[String].getOrElse("")
       val df = (json.getOrElse(null) \ "df").asOpt[Int].getOrElse(0)
       val ans1 = (json.getOrElse(null) \ "ans1").asOpt[String].getOrElse("")
       val ans2 = (json.getOrElse(null) \ "ans2").asOpt[String].getOrElse("")

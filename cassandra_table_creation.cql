@@ -6,21 +6,6 @@ CREATE KEYSPACE IF NOT EXISTS spacerock
 use spacerock;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
-// app_config
-CREATE TABLE IF NOT EXISTS spacerock.app_config (
-	key timeuuid PRIMARY KEY,
-	battles_per_game int,
-	categories list<text>
-) WITH 
-read_repair_chance = 0.1
-AND dclocal_read_repair_chance = 0.0
-AND gc_grace_seconds = 864000
-AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 } 
-AND replicate_on_write = true 
-AND caching = 'KEYS_ONLY' 
-AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
-
-///////////////////////////////////////////////////////////////////////////////////////////////
 // game_info
 CREATE TABLE IF NOT EXISTS spacerock.game_info (
 	gid int PRIMARY KEY,
@@ -37,6 +22,7 @@ AND replicate_on_write = true
 AND caching = 'KEYS_ONLY' 
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
+CREATE INDEX game_info_name on game_info(game_name);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // game_result
@@ -100,10 +86,10 @@ CREATE TABLE IF NOT EXISTS spacerock.users (
 	last_name text,
 	email text,
 	fb_id text,
-	loc_state text,
-	loc_region text,
-	loc_country text,
-	app_name text,
+	state text,
+	region text,
+	country text,
+	apps text,
 	registered_time bigint,
 	last_seen bigint,
 	platform text,
@@ -111,7 +97,7 @@ CREATE TABLE IF NOT EXISTS spacerock.users (
 	model text,
 	phone text,
 	device_uuid text,
-	PRIMARY KEY (uid, device_uuid, user_name)
+	PRIMARY KEY (uid)
 ) WITH 
 read_repair_chance = 0.1
 AND dclocal_read_repair_chance = 0.0
@@ -121,17 +107,4 @@ AND replicate_on_write = true
 AND caching = 'KEYS_ONLY' 
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-// results
-CREATE TABLE IF NOT EXISTS spacerock.results (
-	userid uuid PRIMARY KEY,
-	results list<bigint>
-) WITH 
-read_repair_chance = 0.1
-AND dclocal_read_repair_chance = 0.0
-AND gc_grace_seconds = 864000
-AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 } 
-AND replicate_on_write = true 
-AND caching = 'KEYS_ONLY' 
-AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+CREATE INDEX user_username on users(user_name);
