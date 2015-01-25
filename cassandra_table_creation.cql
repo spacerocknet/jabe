@@ -21,10 +21,42 @@ AND caching = 'KEYS_ONLY'
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
+// game_info
+CREATE TABLE IF NOT EXISTS spacerock.game_info (
+	gid int PRIMARY KEY,
+	game_name text,
+	game_description text,
+	categories list<text>,
+	battles_per_game int
+) WITH 
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 } 
+AND replicate_on_write = true 
+AND caching = 'KEYS_ONLY' 
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// game_result
+CREATE TABLE IF NOT EXISTS spacerock.game_result (
+	uid text PRIMARY KEY,
+	results list<text>
+) WITH 
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 } 
+AND replicate_on_write = true 
+AND caching = 'KEYS_ONLY' 
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
 // categories 
 CREATE TABLE IF NOT EXISTS spacerock.categories (
 	category text PRIMARY KEY,
-	battles_per_game int
+	description text
 ) WITH 
 read_repair_chance = 0.1
 AND dclocal_read_repair_chance = 0.0
@@ -62,7 +94,7 @@ CREATE INDEX quizzes_category on quizzes(category);
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // users
 CREATE TABLE IF NOT EXISTS spacerock.users (
-	uid uuid,
+	uid text,
 	user_name text,
 	first_name text,
 	last_name text,
@@ -74,7 +106,12 @@ CREATE TABLE IF NOT EXISTS spacerock.users (
 	app_name text,
 	registered_time bigint,
 	last_seen bigint,
-	PRIMARY KEY (uid, user_name)
+	platform text,
+	os text,
+	model text,
+	phone text,
+	device_uuid text,
+	PRIMARY KEY (uid, device_uuid, user_name)
 ) WITH 
 read_repair_chance = 0.1
 AND dclocal_read_repair_chance = 0.0
