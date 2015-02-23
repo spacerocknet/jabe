@@ -62,7 +62,7 @@ II. API Service
          {  status: "Ok"}
 
 
-  5. Add a question into the system
+   5. Add a question into the system
      Request:
       POST /quiz/add
        {
