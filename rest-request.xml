@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--=================================================================================-->
+<!--Game Controller-->
+<!--=================================================================================-->
+<!--Get Game info by ID-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/game/1</URL><method>GET</method></request></rest-client>
+<!--Get Game info by name-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/game/homeworld%20hero</URL><method>GET</method></request></rest-client>
+<!--Save game result (overwrite old results)-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/game/saveresult</URL><method>POST</method><body><string content-type="text/plain" charset="UTF-8">{"uid": "218391232", "result":"3213 31321 3141432"}</string></body></request></rest-client>
+<!--Save game result (add new result to current records)-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/game/saveanotherresult</URL><method>POST</method><body><string content-type="text/plain" charset="UTF-8">{"uid": "1243213454", "result":"12143 431 13214"}</string></body></request></rest-client>
+<!--Get game result by UID-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/game/getresult/8428174321</URL><method>GET</method></request></rest-client>
+
+<!--=================================================================================-->
+<!--Category Controller-->
+<!--=================================================================================-->
+<!--Get all categories-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/quiz/all</URL><method>GET</method></request></rest-client>
+<!--Get category info by name-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/cat/history</URL><method>GET</method></request></rest-client>
+<!--Add new category-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/cat/add</URL><method>POST</method><body><string content-type="text/plain" charset="UTF-8">{"category": "category 5", "description": "description of the category 5"}</string></body></request></rest-client>
+<!--Update category-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/cat/update</URL><method>POST</method><body><string content-type="text/plain" charset="UTF-8">{"category": "category 5", "description": "description of the category 5"}</string></body></request></rest-client>
+
+<!--=================================================================================-->
+<!--User controller-->
+<!--=================================================================================-->
+<!--Get user info by username-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/user/byname/admin</URL><method>GET</method></request></rest-client>
+<!--Get category by name-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/user/byuid/7124281431</URL><method>GET</method></request></rest-client>
+<!--Get all users-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/user/all</URL><method>GET</method></request></rest-client>
+<!--Add new user without info-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/user/addnoinfo</URL><method>POST</method><body><string content-type="text/plain" charset="UTF-8">{"platform": "Linux", "os": "iOS 7.0", "model": "Iphone 6 Plus", "phone": "8468713281321", "device-uuid":"ACKIFDS-432"}</string></body></request></rest-client>
+<!--Update user info-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/user/updateinfo</URL><method>POST</method><body><string content-type="text/plain" charset="UTF-8">{"uid": "432714832", "user-name": "user1", "first-name": "Geoger", "last-name": "Bush", "email": "user1@spacerock.com", "fbId": "325657465", "state": "Washington D.C", "region": "Washington", "country": "United State Of America", "apps": "Homeworld Hero"}</string></body></request></rest-client>
+
+<!--=================================================================================-->
+<!--Quiz controller-->
+<!--=================================================================================-->
+<!--Get all quizzes-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/quiz/all</URL><method>GET</method></request></rest-client>
+<!--Get quiz by id-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/quiz/byid/</URL><method>GET</method></request></rest-client>
+<!--Get all quizzes by category -->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/quiz/bycat/history</URL><method>GET</method></request></rest-client>
+<!--Request new quiz(zes)-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/quiz/request</URL><method>POST</method><body><string content-type="text/plain" charset="UTF-8">{"category": "sport", "qid": 889943322, "question": "Which team won the World cup 1996?", "right-answer": "Brazil", "df": "1", "ans1": "Australia", "ans2": "Japan", "ans3": "Argentina"}</string></body></request></rest-client>
+<!--Add new quiz-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/quiz/add</URL><method>POST</method><body><string content-type="text/plain" charset="UTF-8">{"category": "sport", "qid": 889943322, "question": "Which team won the World cup 1996?", "right-answer": "Brazil", "df": "1", "ans1": "Australia", "ans2": "Japan", "ans3": "Argentina"}</string></body></request></rest-client>
+<!--Update quiz-->
+<rest-client version="3.2.2"><request><http-version>1.1</http-version><http-follow-redirects/><URL>http://localhost:8080/v1/quiz/update</URL><method>POST</method><body><string content-type="text/plain" charset="UTF-8">{"category": "sport", "qid": 889943322, "question": "Which team won the World cup 1996?", "right-answer": "Brazil", "df": "1", "ans1": "Australia", "ans2": "Japan", "ans3": "Argentina"}</string></body></request></rest-client>
