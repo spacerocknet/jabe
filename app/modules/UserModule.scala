@@ -1,23 +1,24 @@
 package modules
 
 import scaldi.Module
-import scaldi.play.condition._
-
-import spacerock.utils.UuidGenerator
-import spacerock.utils.UuidMacBasedGenerator
-import spacerock.persistence._
+import spacerock.cache.Redis.{RedisWrapperDAO, RedisWrapper}
+import spacerock.persistence.cassandra._
+import spacerock.utils.{IdGenerator, UidGenerator}
 
 class UserModule extends Module {
-  bind [UuidGenerator] to new UuidMacBasedGenerator
-
-  bind [NewUserData] to new NewUserDataDAO
-
-  bind [NewCategory] to new NewCategoryDAO
-
-  bind [NewQuiz] to new NewQuizDAO
-
-  bind [GameConfig] to new GameConfigDAO
-
+  // persistence
+  bind [Billing] to new BillingDAO
+  bind [CassandraLock] to new CassandraLockDAO
+  bind [Category] to new CategoryDAO
+  bind [Device] to new DeviceDAO
+  bind [GameInfo] to new GameInfoDAO
   bind [GameResult] to new GameResultDAO
+  bind [Quiz] to new QuizDAO
+  bind [Sku] to new SkuDAO
+  bind [UidBlock] to new UidBlockDAO
+  bind [UserData] to new UserDataDAO
+  // cache
+  bind [RedisWrapper] to new RedisWrapperDAO
+  bind [IdGenerator] to new UidGenerator
 
 }

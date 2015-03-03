@@ -1,25 +1,27 @@
-package spacerock.persistence
+package spacerock.persistence.cassandra
 
 import com.datastax.driver.core._
-import models.{QuAn}
+import models.QuAnModel
 import play.Logger
 import scaldi.{Injectable, Injector}
+
 import scala.collection.JavaConversions._
 /**
  * Created by william on 1/13/15.
  */
 
-trait NewQuiz {
-  def getQuizByQid(qid: Long): QuAn
-  def getQuizzesByCategory(category: String): List[QuAn]
+trait Quiz {
+  def getQuizByQid(qid: Long): QuAnModel
+  def getQuizzesByCategory(category: String): List[QuAnModel]
   def addNewQuiz(qid: Long, category: String, question: String, correctAns: String,
                  ans1: String, ans2: String, ans3: String, df: Int): Boolean
   def updateQuiz(qid: Long, category: String, question: String, correctAns: String,
                  ans1: String, ans2: String, ans3: String, df: Int): Boolean
-  def getAllQuizzes(): List[QuAn]
+  def getAllQuizzes(): List[QuAnModel]
+  def close(): Unit
 }
 
-class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
+class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
   val clusterName = inject [String] (identified by "cassandra.cluster")
   var cluster: Cluster = null
   var session: Session = null
@@ -50,6 +52,18 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
     true
   }
 
+  /**
+   * Add new quiz to quiz bank
+   * @param qid quiz id
+   * @param category quiz category. In version 1, it only support n-1 relationship between category and quiz
+   * @param question question
+   * @param rightAnswer right answer
+   * @param ans1 answer 1
+   * @param ans2 answer 2
+   * @param ans3 answer 3
+   * @param df
+   * @return true if success, otherwise false
+   */
   override def addNewQuiz(qid: Long, category: String, question: String, rightAnswer: String,
                           ans1: String, ans2: String, ans3: String, df: Int): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddNewQuiz", null)
@@ -71,7 +85,12 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
     true
   }
 
-  override def getQuizByQid(qid: Long): QuAn = {
+  /**
+   * Get quiz by quiz id
+   * @param qid quiz id
+   * @return QuAn model if success, otherwise null
+   */
+  override def getQuizByQid(qid: Long): QuAnModel = {
     val ps: PreparedStatement = pStatements.get("GetQuizByQid").getOrElse(null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
@@ -82,7 +101,7 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
     val result: ResultSet = session.execute(bs)
     val row: Row = result.one()
     if (row != null) {
-      val qa: QuAn = new QuAn(row.getLong("qid"), row.getString("category"), row.getString("question"),
+      val qa: QuAnModel = new QuAnModel(row.getLong("qid"), row.getString("category"), row.getString("question"),
                               row.getString("right_answer"),
                               row.getString("ans1"), row.getString("ans2"), row.getString("ans3"),
                               row.getInt("df"))
@@ -93,7 +112,12 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
 
   }
 
-  override def getQuizzesByCategory(category: String): List[QuAn] = {
+  /**
+   * Get all quizzes of requested category
+   * @param category category name
+   * @return list of QuAn model if success, otherwise null
+   */
+  override def getQuizzesByCategory(category: String): List[QuAnModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetQuizzesByCategory", null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
@@ -103,17 +127,21 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
     bs.setString(0, category)
     bs.setInt(1, 2)
     val result: ResultSet = session.execute(bs)
-    val l: scala.collection.mutable.ListBuffer[QuAn] = scala.collection.mutable.ListBuffer()
+    val l: scala.collection.mutable.ListBuffer[QuAnModel] = scala.collection.mutable.ListBuffer()
 
     for (r: Row <- result.all()) {
-      l.add(new QuAn(r.getLong("qid"), r.getString("category"), r.getString("question"),
+      l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
         r.getString("right_answer"),
         r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
     }
     l.toList
   }
 
-  override def getAllQuizzes(): List[QuAn] = {
+  /**
+   * Get all quizzes from system
+   * @return list of QuAn model if success, otherwise false
+   */
+  override def getAllQuizzes(): List[QuAnModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetAllQuizzes", null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
@@ -121,11 +149,11 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
     }
     val bs: BoundStatement = new BoundStatement(ps)
     val result: ResultSet = session.execute(bs)
-    val l: scala.collection.mutable.ListBuffer[QuAn] = scala.collection.mutable.ListBuffer()
+    val l: scala.collection.mutable.ListBuffer[QuAnModel] = scala.collection.mutable.ListBuffer()
 
     for (r: Row <- result.all()) {
 
-      l.add(new QuAn(r.getLong("qid"), r.getString("category"), r.getString("question"),
+      l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
         r.getString("right_answer"),
         r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
     }
@@ -171,7 +199,7 @@ class NewQuizDAO (implicit inj: Injector) extends NewQuiz with Injectable {
     pStatements.put("GetAllQuizzes", ps)
   }
 
-  def close() = {
+  override def close() = {
     if (cluster != null)
       cluster.close()
   }

@@ -7,6 +7,6 @@ package models
  * @param category - category
  * @param num  - how many
  */
-case class QuizRequest(userId: Long, category: String, num: Int)
+case class QuizRequestModel(userId: Long, category: String, num: Int)
 
 

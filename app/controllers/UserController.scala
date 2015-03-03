@@ -1,33 +1,94 @@
 package controllers
 
+import java.util.Date
+
 import models._
 import play.api.Logger
 import play.api.libs.json._
 import play.api.mvc.{Controller, _}
 import scaldi.{Injectable, Injector}
-import spacerock.persistence.NewUserData
-import spacerock.utils.UuidGenerator
+import spacerock.constants.Constants
+import spacerock.persistence.cassandra.{Device, CassandraLock, UidBlock, UserData}
+import spacerock.utils.{StaticVariables, IdGenerator}
+import scala.collection.JavaConversions._
 
 class UserController (implicit inj: Injector) extends Controller with Injectable {
-  val userDao = inject [NewUserData]
-  val uuidGenerator = inject [UuidGenerator]
+  val userDao = inject [UserData]
+  val idGenerator = inject [IdGenerator]
   val OkStatus = Json.obj("status" -> "OK")
   val FailedStatus = Json.obj("status" -> "Failed")
+  val uidBlock = inject [UidBlock]
+  val idLocker = inject [CassandraLock]
+  val device = inject [Device]
 
-  /* generate uuid for client */
-  def generateUniqId() = Action {
-      val json = Json.obj("uuid" -> uuidGenerator.generate())
-      Ok(json)
+  /**
+   * Get next block ids from cassandra.
+   * @return true if success, otherwise false
+   */
+  private def getNewBlockIds: Boolean = {
+    var count: Int = 0
+    var isCreateNew: Boolean = false
+    var res: Boolean = false
+    var blocks: Set[Long] = null
+    var nextBlock: Set[String] = null
+    var canLock: Boolean = idLocker.tryLock(Constants.REDIS_UID_KEY)
+    while (!canLock && count < Constants.MAX_LOCK_TRIES) {
+      canLock = idLocker.tryLock(Constants.REDIS_UID_KEY)
+      count = count + 1
+    }
+    if (canLock) {
+      val nextBlkId: Int = uidBlock.getNextBlockId()
+      // runs out of blocks
+      if (nextBlkId < 0) {
+        // generate new block
+        Logger.info("Generate new block")
+        blocks = idGenerator.generateNextBlock(Constants.REDIS_UID_KEY, Constants.MAX_UID_BLOCK_SIZE)
+        nextBlock = blocks.map(i => i.toString)
+        uidBlock.addNewBlock(idGenerator.generateNextId(Constants.REDIS_BLOCK_ID_KEY).toInt, nextBlock, true, StaticVariables.serverId)
+        isCreateNew = true
+      }
+      if (!isCreateNew) {
+        nextBlock = uidBlock.assignBlockToServer(nextBlkId, StaticVariables.serverId)
+      }
+      nextBlock.foreach(id => StaticVariables.freeIds.add(id))
+      // unlock key
+      idLocker.unlock(Constants.REDIS_UID_KEY)
+      res = true
+    }
+
+    res
   }
 
-  // get all user from database
+  /**
+   * Generate uuid for client
+   * @return client id object if succes, otherwise Service unavailable
+   */
+  def generateUniqueId() = Action {
+    var count: Int = 0
+    var canLock: Boolean = idLocker.tryLock(Constants.REDIS_CLIENT_KEY)
+    while (!canLock && count < Constants.MAX_LOCK_TRIES) {
+      canLock = idLocker.tryLock(Constants.REDIS_CLIENT_KEY)
+      count = count + 1
+    }
+    if (canLock) {
+      val json = Json.obj("client-id" -> idGenerator.generateNextId(Constants.REDIS_CLIENT_KEY))
+      idLocker.unlock(Constants.REDIS_CLIENT_KEY)
+      Ok(json)
+    }
+    ServiceUnavailable("")
+  }
+
+  /**
+   * Get all users of system
+   * @return
+   */
 	def getAllUser = Action {
-    val result: List[Subscriber] = userDao.getAllUsers()
+    val result: List[SubscriberModel] = userDao.getAllUsers()
     var seq = Seq[JsObject]()
     for(subscriber <- result) {
 
       val userString = Json.obj(
-        "uuid" -> (if (subscriber.uid == null) "" else subscriber.uid),
+        "uid" -> (if (subscriber.uid == null) "" else subscriber.uid),
         "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
         "os" -> (if (subscriber.os == null) "" else subscriber.os),
         "model" -> (if (subscriber.model == null) "" else subscriber.model),
@@ -44,13 +105,17 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
     Ok(JsArray(seq))
 	}
 
-  // get user by uid
+  /**
+   * Get user by uid.
+   * @param uid user id
+   * @return subscriber info if success, empty json object or bad request otherwise.
+   */
   def getUserInfoByUID (uid: String) = Action {
     try {
-      val subscriber: Subscriber = userDao.getUserInfoByUID(uid)
+      val subscriber: SubscriberModel = userDao.getInfoByUID(uid)
       if (subscriber != null) {
         val userString = Json.obj(
-          "uuid" -> (if (subscriber.uid == null) "" else subscriber.uid),
+          "uid" -> (if (subscriber.uid == null) "" else subscriber.uid),
           "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
           "os" -> (if (subscriber.os == null) "" else subscriber.os),
           "model" -> (if (subscriber.model == null) "" else subscriber.model),
@@ -75,13 +140,17 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
     }
   }
 
-  // get user by username
+  /**
+   * Get user by username
+   * @param userName
+   * @return
+   */
   def getUserInfoByUsername (userName: String) = Action {
     try {
-      val subscriber: Subscriber = userDao.getUserInfoByUsername(userName)
+      val subscriber: SubscriberModel = userDao.getInfoByUsername(userName)
       if (subscriber != null) {
         val userString = Json.obj(
-          "uuid" -> (if (subscriber.uid == null) "" else subscriber.uid),
+          "uid" -> (if (subscriber.uid == null) "" else subscriber.uid),
           "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
           "os" -> (if (subscriber.os == null) "" else subscriber.os),
           "model" -> (if (subscriber.model == null) "" else subscriber.model),
@@ -105,7 +174,10 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
     }
   }
 
-  // add new user
+  /**
+   * Update existed user with some extra information
+   * @return
+   */
   def updateUserInfo = Action { request =>
     try {
       val json: Option[JsValue] = request.body.asJson
@@ -121,12 +193,10 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
       val locCountry = (json.getOrElse(null) \ "country").asOpt[String].getOrElse("")
       val appName = (json.getOrElse(null) \ "apps").asOpt[String].getOrElse("")
       if (uid != null) {
-        //generate uuid
-
-        userDao.addUserBasicInfo(uid, userName, firstName, lastName, email, fbId,
+        userDao.addBasicInfo(uid, userName, firstName, lastName, email, fbId,
                             locState, locRegion, locCountry, appName)
         val userString = Json.obj(
-          "uuid" -> uid)
+          "uid" -> uid)
         Ok(userString)
       }
       else {
@@ -140,7 +210,15 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
     }
   }
 
-  // add new user without user's information
+  /**
+   * Add user by device's info / register. This method do the following tasks:
+   *  - Take an uid for new user from free ids. If the store is empty, it will generate and assign itself to
+   *    the created block of ids.
+   *  - Insert new subscribe to system
+   *  - Insert device's info to system
+   *  - Return uid for subscriber
+   * @return uid if success, otherwise Service unavailable
+   */
   def addUserWithoutInfo = Action { request =>
     try {
       val json: Option[JsValue] = request.body.asJson
@@ -150,24 +228,50 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
       val phone = (json.getOrElse(null) \ "phone").asOpt[String].getOrElse("")
       val model = (json.getOrElse(null) \ "model").asOpt[String].getOrElse("")
       val deviceUuid = (json.getOrElse(null) \ "device-uuid").asOpt[String].getOrElse("")
-      val uuid = uuidGenerator.generate
-      val subscriber = new Subscriber(uuid, platform, os, model, phone, deviceUuid)
-      val status: Boolean = userDao.addDeviceInfo(subscriber)
-      if (status) {
-        val userString = Json.obj("uuid" -> uuid)
-        Ok(userString)
+      var uid: String = null
+
+      // get or generate new uid
+      if (StaticVariables.freeIds.isEmpty) {
+        if (getNewBlockIds) {
+
+        } else {
+          Logger.info("Cannot get new uid block")
+        }
+      }
+      try {
+        uid = StaticVariables.freeIds.remove(0)
+      } catch {
+        case e: Exception => { Logger.info("exception = %s" format e); uid = ""}
+      }
+
+      if (uid != null && !uid.equals("")) {
+        val subscriber = new SubscriberModel(uid, platform, os, model, phone, deviceUuid)
+        var status: Boolean = userDao.addDeviceInfo(subscriber)
+        // add device info
+        status = status && device.addNewDevice(deviceUuid, new Date(System.currentTimeMillis()), uid,
+          platform, model, phone)
+        if (status) {
+          val userString = Json.obj("uid" -> uid)
+          Ok(userString)
+        } else {
+          Logger.warn("User registration error. Please check users and devices tables")
+        }
       } else {
-        ServiceUnavailable("Service is currently unavailable")
+        Logger.info("Cannot get uid")
       }
     } catch {
       case e:Exception => {
         Logger.info("exception = %s" format e)
-        BadRequest("Internal server error")
       }
     }
+    ServiceUnavailable("Service is currently unavailable")
   }
 
-  // add new user without user's information
+  /**
+   * When user changes his device, this information will be updated.
+   * There are 2 tables need to update: users and device.
+   * @return ok status if success, failed status, bad request if not
+    */
   def userChangeDevice = Action { request =>
     var result = OkStatus
     try {
@@ -178,13 +282,15 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
       val platform = (json.getOrElse(null) \ "platform").asOpt[String].getOrElse("")
       val phone = (json.getOrElse(null) \ "phone").asOpt[String].getOrElse("")
       val model = (json.getOrElse(null) \ "model").asOpt[String].getOrElse("")
-      val deviceUuid = (json.getOrElse(null) \ "deviceUuid").asOpt[String].getOrElse("")
+      val deviceUuid = (json.getOrElse(null) \ "device-uuid").asOpt[String].getOrElse("")
 
       if (uid == null) {
-        BadRequest("Malformed request")
+        BadRequest("Wrong format")
       } else {
-        val subscriber = new Subscriber(uuidGenerator.generate, platform, os, model, phone, deviceUuid)
-        val status: Boolean = userDao.addDeviceInfo(subscriber)
+        val subscriber = new SubscriberModel(uid, platform, os, model, phone, deviceUuid)
+        var status: Boolean = userDao.addDeviceInfo(subscriber)
+        status = status && device.addNewDevice(deviceUuid, new Date(System.currentTimeMillis()), uid,
+          platform, model, phone)
         if (!status) {
           result = FailedStatus
         }
@@ -196,6 +302,5 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
       }
     }
     Ok(result)
-
   }
 }

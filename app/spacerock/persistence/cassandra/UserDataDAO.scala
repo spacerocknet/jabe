@@ -1,31 +1,33 @@
-package spacerock.persistence
-
-import java.util.UUID
+package spacerock.persistence.cassandra
 
 import com.datastax.driver.core._
-import models.Subscriber
+import models.SubscriberModel
 import play.Logger
-import scala.collection.JavaConversions._
 import scaldi.{Injectable, Injector}
+
+import scala.collection.JavaConversions._
+import scala.collection.mutable
 
 /**
  * Created by william on 1/13/15.
  */
 
-trait NewUserData {
-  def getUserInfoByUID(uuid: String): Subscriber
-  def getUserInfoByUsername(userName: String): Subscriber
-  def addUserBasicInfo(uid: String, userName: String, firstName: String, lastName: String,
+trait UserData {
+  def getInfoByUID(uuid: String): SubscriberModel
+  def getInfoByUsername(userName: String): SubscriberModel
+  def addBasicInfo(uid: String, userName: String, firstName: String, lastName: String,
                       email: String, fbId: String, locState: String, locRegion: String,
                       locCountry: String, appName: String): Boolean
-  def addDeviceInfo(uid: String, platform: String, os: String, model: String, phone: String, deviceUuid: String): Boolean
-  def addDeviceInfo(subscriber: Subscriber): Boolean
+  def addDeviceInfo(uid: String, platform: String, os: String, model: String,
+                    phone: String, deviceUuid: String): Boolean
+  def addDeviceInfo(subscriber: SubscriberModel): Boolean
   def updateLastSeenField(uuid: String): Boolean
-  def getAllUsers(): List[Subscriber]
+  def getAllUsers(): List[SubscriberModel]
   def changeDevice(uid: String, platform: String, os: String, model: String, phone: String, deviceUuid: String): Boolean
+  def close(): Unit
 }
 
-class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectable {
+class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
   val clusterName = inject [String] (identified by "cassandra.cluster")
   var cluster: Cluster = null
   var session: Session = null
@@ -34,20 +36,39 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
 
   val isConnected: Boolean = connect("127.0.0.1")
 
-  override def updateLastSeenField(uuid: String): Boolean = {
+  /**
+   * Update last seen field on users table
+   * @param uid user id
+   * @return true if success, otherwise false
+   */
+  override def updateLastSeenField(uid: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateLastSeen", null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
       return false
     }
     val bs: BoundStatement = new BoundStatement(ps)
-    bs.setString("uid", uuid)
+    bs.setString("uid", uid)
     bs.setLong("last_seen", System.currentTimeMillis())
     session.execute(bs)
     true
   }
 
-  override def addUserBasicInfo (uid: String, userName: String, firstName: String, lastName: String,
+  /**
+   * Add user's basic info.
+   * @param uid user id
+   * @param userName user name
+   * @param firstName first name
+   * @param lastName last name
+   * @param email email
+   * @param fbId user's facebook id
+   * @param locState location state that user stays
+   * @param locRegion location region
+   * @param locCountry country
+   * @param appName application name
+   * @return true if success, otherwise false
+   */
+  override def addBasicInfo (uid: String, userName: String, firstName: String, lastName: String,
                                    email: String, fbId: String, locState: String, locRegion: String,
                                    locCountry: String, appName: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddUserInfo", null)
@@ -73,6 +94,17 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
     true
   }
 
+  /**
+   * Change device. This method will update current device's info and add uuid to set of devices.
+   * Use Set of String, so there's no duplicated device in the list.
+   * @param uid user id
+   * @param platform new device's platform
+   * @param os new device's operating system
+   * @param model new device's model
+   * @param phone user's phone number
+   * @param deviceUuid new device's model
+   * @return true if success, otherwise false
+   */
   override def changeDevice(uid: String, platform: String, os: String, model: String,
                             phone: String, deviceUuid: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("ChangeDevice", null)
@@ -80,6 +112,8 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
       Logger.error("Cannot connect to database")
       return false
     }
+    val set: mutable.HashSet[String] = new mutable.HashSet[String]
+    set.add(deviceUuid)
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("uid", uid)
     bs.setString("device_uuid", deviceUuid)
@@ -87,10 +121,21 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
     bs.setString("model", model)
     bs.setString("platform", platform)
     bs.setString("phone", phone)
+    bs.setSet("device_list", set)
     session.execute(bs)
     true
   }
 
+  /**
+   * Same as method @changeDevice, this will add and set the submitted device's info to set and overwrite current info.
+   * @param uid user id
+   * @param platform device's platform
+   * @param os device's operating system
+   * @param model device's model
+   * @param phone user's phone number
+   * @param deviceUuid device's id
+   * @return true if success, otherwise false
+   */
   override def addDeviceInfo(uid: String, platform: String, os: String, model: String,
                              phone: String, deviceUuid: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddDeviceInfo", null)
@@ -98,6 +143,8 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
       Logger.error("Cannot connect to database")
       return false
     }
+    val set: mutable.HashSet[String] = new mutable.HashSet[String]
+    set.add(deviceUuid)
     val bs: BoundStatement = new BoundStatement(ps)
     val time: Long = System.currentTimeMillis()
     bs.setString("uid", uid)
@@ -107,16 +154,27 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
     bs.setString("platform", platform)
     bs.setString("phone", phone)
     bs.setLong("registered_time", time)
+    bs.setSet("device_list", set)
     session.execute(bs)
     true
   }
 
-  override def addDeviceInfo(subscriber: Subscriber): Boolean = {
+  /**
+   * See method @addDeviceInfo. This method do the same thing except it deals with the input as subscriber model
+   * @param subscriber subscriber model
+   * @return true if success, otherwise false
+   */
+  override def addDeviceInfo(subscriber: SubscriberModel): Boolean = {
     addDeviceInfo(subscriber.uid, subscriber.platform, subscriber.os, subscriber.model,
                   subscriber.phone, subscriber.deviceUuid)
   }
 
-  override def getUserInfoByUID(uid: String): Subscriber = {
+  /**
+   * Get user's information by user id
+   * @param uid user id
+   * @return Subscriber model if success, otherwise null
+   */
+  override def getInfoByUID(uid: String): SubscriberModel = {
     val ps: PreparedStatement = pStatements.get("GetUserInfoByUID").orNull(null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
@@ -127,18 +185,24 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
     val result: ResultSet = session.execute(bs)
     val row: Row = result.one()
     if (row != null) {
-      val subscriber: Subscriber = new Subscriber(row.getString("uid"), row.getString("platform"),
+      val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
         row.getString("os"), row.getString("model"),
         row.getString("phone"),row.getString("device_uuid"), row.getString("email"),
         row.getString("fb_id"), row.getString("state"),
         row.getString("region"), row.getString("country"), row.getString("apps"))
+      subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
       subscriber
     } else {
       null
     }
   }
 
-  def getUserInfoByUsername(userName: String): Subscriber = {
+  /**
+   * Get user's information by username
+   * @param userName
+   * @return Subscriber model if success, otherwise null
+   */
+  def getInfoByUsername(userName: String): SubscriberModel = {
     val ps: PreparedStatement = pStatements.getOrElse("GetUserInfoByUsername", null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
@@ -148,15 +212,20 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
     bs.setString("user_name", userName)
     val result: ResultSet = session.execute(bs)
     val row: Row = result.one()
-    val subscriber: Subscriber = new Subscriber(row.getString("uid"), row.getString("platform"),
+    val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
       row.getString("os"), row.getString("model"),
       row.getString("phone"),row.getString("device_uuid"), row.getString("email"),
       row.getString("fb_id"), row.getString("state"),
       row.getString("region"), row.getString("country"), row.getString("apps"))
+    subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
     subscriber
   }
 
-  override def getAllUsers(): List[Subscriber] = {
+  /**
+   * Get all user from system.
+   * @return list of subscriber models
+   */
+  override def getAllUsers(): List[SubscriberModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetAllUsers", null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
@@ -164,13 +233,16 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
     }
     val bs: BoundStatement = new BoundStatement(ps)
     val result: ResultSet = session.execute(bs)
-    val l: scala.collection.mutable.ListBuffer[Subscriber] = scala.collection.mutable.ListBuffer()
+    val l: scala.collection.mutable.ListBuffer[SubscriberModel] = scala.collection.mutable.ListBuffer()
     for (row: Row <- result.all()) {
-      l.add(new Subscriber(row.getString("uid"), row.getString("platform"),
+      val sm: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
         row.getString("os"), row.getString("model"),
         row.getString("phone"),row.getString("device_uuid"), row.getString("email"),
         row.getString("fb_id"), row.getString("state"),
-        row.getString("region"), row.getString("country"), row.getString("apps")))
+        row.getString("region"), row.getString("country"), row.getString("apps"))
+      sm.deviceSet = row.getSet("device_list", classOf[String]).toSet
+      l.add(sm)
+
     }
     l.toList
   }
@@ -198,7 +270,7 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
     pStatements.put("UpdateLastSeen", ps)
 
     // change user device
-    ps = session.prepare("UPDATE spacerock.users SET device_uuid = ?, platform = ?, os = ?, " +
+    ps = session.prepare("UPDATE spacerock.users SET device_list = device_list + ?, device_uuid = ?, platform = ?, os = ?, " +
       "model = ?, phone = ? WHERE uid = ?;")
     pStatements.put("ChangeDevice", ps)
 
@@ -209,9 +281,10 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
     pStatements.put("AddUserInfo", ps)
 
     // add device information
-    ps = session.prepare("INSERT INTO spacerock.users (uid, device_uuid, platform, os, model, phone, registered_time) " +
+    ps = session.prepare("INSERT INTO spacerock.users (uid, device_uuid, platform, os, " +
+      "model, phone, registered_time, device_list) " +
       "VALUES " +
-      "(?, ?, ?, ?, ?, ?, ?)")
+      "(?, ?, ?, ?, ?, ?, ?, ?)")
     pStatements.put("AddDeviceInfo", ps)
 
     // Get user info
@@ -225,7 +298,7 @@ class NewUserDataDAO (implicit inj: Injector) extends NewUserData with Injectabl
     pStatements.put("GetAllUsers", ps)
   }
 
-  def close() = {
+  override def close() = {
     if (cluster != null)
       cluster.close()
   }

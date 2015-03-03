@@ -6,13 +6,11 @@
 GET         /                                 @controllers.Application.index
 #---------------------------------------------------------------------------------------------
 # Game
-GET         /v1/game/:game_id                 @controllers.GameController.gameInfo(game_id: Int)
-GET         /v1/gamebyname/:game_name         @controllers.GameController.gameInfoByName(game_name: String)
-# overwrite old results
-POST        /v1/game/saveresult               @controllers.GameController.gameNewResult
-# add new results to existed one
-POST        /v1/game/saveanotherresult        @controllers.GameController.gameResult
-GET         /v1/game/getresult/:uid           @controllers.GameController.getResult(uid: String)
+GET         /v1/game/:game_id                 @controllers.GameController.getGameInfo(game_id: Int)
+GET         /v1/gamebyname/:game_name         @controllers.GameController.getGameInfoByName(game_name: String)
+POST        /v1/game/saveresult               @controllers.GameController.addNewGameResult
+GET         /v1/game/getresult/:uid           @controllers.GameController.getGameResult(uid: String)
+POST         /v1/game/getresult               @controllers.GameController.getGameResult
 #---------------------------------------------------------------------------------------------
 # Category
 GET         /v1/cat/all                       @controllers.CategoryController.getAllCategory
@@ -28,13 +26,29 @@ POST        /v1/user/addnoinfo                @controllers.UserController.addUse
 POST        /v1/user/updateinfo               @controllers.UserController.updateUserInfo
 #---------------------------------------------------------------------------------------------
 # Quizzes
-GET         /v1/quiz/all                      @controllers.NewQuizController.getAllQuiz
-GET         /v1/quiz/byid/:qid                @controllers.NewQuizController.getQuizById(qid: Long)
-GET         /v1/quiz/bycat/:cat               @controllers.NewQuizController.getQuizByCategory(cat: String)
-POST        /v1/quiz/request                  @controllers.NewQuizController.quizRequest
-POST        /v1/quiz/add                      @controllers.NewQuizController.addNewQuiz
-POST        /v1/quiz/update                   @controllers.NewQuizController.updateQuiz
+GET         /v1/quiz/all                      @controllers.QuizController.getAllQuiz
+GET         /v1/quiz/byid/:qid                @controllers.QuizController.getQuizById(qid: Long)
+GET         /v1/quiz/bycat/:cat               @controllers.QuizController.getQuizByCategory(cat: String)
+POST        /v1/quiz/request                  @controllers.QuizController.quizRequest
+POST        /v1/quiz/add                      @controllers.QuizController.addNewQuiz
+POST        /v1/quiz/update                   @controllers.QuizController.updateQuiz
 #---------------------------------------------------------------------------------------------
+# sku
+POST        /v1/sku/add                       @controllers.SkuController.addNewSku
+GET         /v1/sku/get/:sku_id               @controllers.SkuController.getSkuInfo(sku_id: Int)
+#---------------------------------------------------------------------------------------------
+# billing
+POST        /v1/billing/add                   @controllers.BillingController.addNewBill
+POST        /v1/billing/getallbyuid           @controllers.BillingController.getBillsByUidAllGamesWithDate
+POST        /v1/billing/getbyuidofgame        @controllers.BillingController.getBillsByUidOfGame
 
+#---------------------------------------------------------------------------------------------
+# sku
+
+#---------------------------------------------------------------------------------------------
+# sku
+
+#---------------------------------------------------------------------------------------------
+# sku
 # Map static resources from the /public folder to the /assets URL path
 GET         /assets/*file                     controllers.Assets.at(path="/public", file)

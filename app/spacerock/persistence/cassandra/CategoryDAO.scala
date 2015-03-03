@@ -1,23 +1,26 @@
-package spacerock.persistence
+package spacerock.persistence.cassandra
 
 import com.datastax.driver.core._
-import models.Category
+import models.CategoryModel
 import play.Logger
 import scaldi.{Injectable, Injector}
+
 import scala.collection.JavaConversions._
+import scala.collection.mutable
 
 /**
  * Created by william on 1/13/15.
  */
 
-trait NewCategory {
-  def getCategoryByName(category: String): Category
+trait Category {
+  def getCategoryByName(category: String): CategoryModel
   def addNewCategory(category: String, description: String): Boolean
-  def updateCategory(category: String, description: String): Boolean
-  def getAllCategories(): List[Category]
+  def updateCategory(category: String, gameId: Int, description: String): Boolean
+  def getAllCategories(): List[CategoryModel]
+  def close()
 }
 
-class NewCategoryDAO (implicit inj: Injector) extends NewCategory with Injectable {
+class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
   val clusterName = inject [String] (identified by "cassandra.cluster")
   var cluster: Cluster = null
   var session: Session = null
@@ -26,20 +29,39 @@ class NewCategoryDAO (implicit inj: Injector) extends NewCategory with Injectabl
 
   val isConnected: Boolean = connect("127.0.0.1")
 
-  override def updateCategory(category: String, description: String): Boolean = {
+
+  /**
+   * Update category with game id list and description
+   * @param category
+   * @param gameId
+   * @param description
+   * @return true if update successfully, false otherwise
+   */
+  override def updateCategory(category: String, gameId: Int, description: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateCategory", null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
       return false
     }
     val bs: BoundStatement = new BoundStatement(ps)
-    bs.setString("description", description)
-    bs.setString("category", category)
+    val set: mutable.HashSet[Int] = new mutable.HashSet[Int]
+    set.add(gameId)
+    bs.setString(0, description)
+    bs.setSet(1, set)
+    bs.setString(2, category)
 
     session.execute(bs)
     true
   }
 
+  /**
+   * Add new category. In the first phase, admin may insert a category first,
+   * then he inserts game info latter.
+   * So we don't need to insert game_id field right now. If the category existed, this will not be inserted
+   * @param category
+   * @param description
+   * @return true if add successfully, false otherwise
+   */
   override def addNewCategory(category: String, description: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddNewCategory", null)
     if (ps == null || !isConnected) {
@@ -54,7 +76,12 @@ class NewCategoryDAO (implicit inj: Injector) extends NewCategory with Injectabl
     true
   }
 
-  override def getCategoryByName(category: String): Category = {
+  /**
+   * Get category information by name. This will return an instance of found category
+   * @param category category name
+   * @return category model if exited or null if not found/error
+   */
+  override def getCategoryByName(category: String): CategoryModel = {
     val ps: PreparedStatement = pStatements.get("GetCategoryByName").getOrElse(null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
@@ -66,14 +93,20 @@ class NewCategoryDAO (implicit inj: Injector) extends NewCategory with Injectabl
 
     val row: Row = result.one()
     if (row != null) {
-      val cat: Category = new Category(row.getString("category"), row.getString("description"))
+      val cat: CategoryModel = new CategoryModel(row.getString("category"),
+        row.getString("description"),
+        row.getSet( "game_list", classOf[Integer]).toList.map(i => i * 1))
       cat
     } else {
       null
     }
   }
 
-  override def getAllCategories(): List[Category] = {
+  /**
+   * Get all categories from system.
+   * @return list of categories
+   */
+  override def getAllCategories(): List[CategoryModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetAllCategories", null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
@@ -81,12 +114,16 @@ class NewCategoryDAO (implicit inj: Injector) extends NewCategory with Injectabl
     }
     val bs: BoundStatement = new BoundStatement(ps)
     val result: ResultSet = session.execute(bs)
-    val l: scala.collection.mutable.ListBuffer[Category] = scala.collection.mutable.ListBuffer()
+    val l: scala.collection.mutable.ListBuffer[CategoryModel] = scala.collection.mutable.ListBuffer()
     for (r: Row <- result.all()) {
-      l.add(new Category(r.getString("category"), r.getString("description")))
+      l.add(new CategoryModel(r.getString("category"),
+        r.getString("description"),
+        r.getSet( "game_list", classOf[Integer]).toList.map(ii => ii * 1)))
     }
+
     l.toList
   }
+
 
   def connect(node: String): Boolean = {
     cluster = Cluster.builder().addContactPoint(node).build()
@@ -107,11 +144,12 @@ class NewCategoryDAO (implicit inj: Injector) extends NewCategory with Injectabl
 
   def init() = {
     // update category
-    var ps: PreparedStatement = session.prepare("UPDATE spacerock.categories SET description = ? where category = ?;")
+    var ps: PreparedStatement = session.prepare("UPDATE spacerock.categories SET description = ?, " +
+      "game_list = game_list + ? where category = ?;")
     pStatements.put("UpdateCategory", ps)
 
     // Add new category
-    ps = session.prepare("INSERT INTO spacerock.categories (category, description) VALUES (?, ?);")
+    ps = session.prepare("INSERT INTO spacerock.categories (category, description) VALUES (?, ?) IF NOT EXIST;")
     pStatements.put("AddNewCategory", ps)
 
     // Get category info
@@ -123,7 +161,7 @@ class NewCategoryDAO (implicit inj: Injector) extends NewCategory with Injectabl
     pStatements.put("GetAllCategories", ps)
   }
 
-  def close() = {
+  override def close() = {
     if (cluster != null)
       cluster.close()
   }
