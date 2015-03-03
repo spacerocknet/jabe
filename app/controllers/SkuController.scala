@@ -37,7 +37,8 @@ class SkuController(implicit inj: Injector) extends Controller with Injectable {
       val startTime: Long = (json.getOrElse(null) \ "start-time").asOpt[Long].getOrElse(-1)
       val expiredTime: Long = (json.getOrElse(null) \ "expired-time").asOpt[Long].getOrElse(-1)
       val extraData: String = (json.getOrElse(null) \ "extra-data").asOpt[String].getOrElse("")
-      val discount: Float = (json.getOrElse(null) \ "description").asOpt[Float].getOrElse(0.0f)
+      val discount: Float = (json.getOrElse(null) \ "discount").asOpt[Float].getOrElse(0.0f)
+
       if (sku.addNewSku(skuId, description, unitPrice, new Date(startTime), new Date(expiredTime),
                     extraData, discount)) {
         Ok("""{"sku-id" : %d}""" format skuId)
@@ -60,7 +61,7 @@ class SkuController(implicit inj: Injector) extends Controller with Injectable {
   def getSkuInfo(skuId: Int) = Action {
     val res: SkuModel = sku.getSkuInfo(skuId)
     if (res != null) {
-      Ok(sku.toString)
+      Ok(res.toString)
     } else {
       Ok(FailedStatus)
     }

@@ -71,7 +71,7 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
    * If not, all records of the user will be returned.
    * @return Ok status with list of billing records, otherwise Ok with empty json object, service unavailable
    */
-  def getBillsByUidAllGamesWithDate = Action { request =>
+  def getBillsByUidAllGames = Action { request =>
     try {
       val json: Option[JsValue] = request.body.asJson
       val uid: String = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")

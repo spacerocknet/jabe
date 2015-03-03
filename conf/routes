@@ -39,7 +39,7 @@ GET         /v1/sku/get/:sku_id               @controllers.SkuController.getSkuI
 #---------------------------------------------------------------------------------------------
 # billing
 POST        /v1/billing/add                   @controllers.BillingController.addNewBill
-POST        /v1/billing/getallbyuid           @controllers.BillingController.getBillsByUidAllGamesWithDate
+POST        /v1/billing/getallbyuid           @controllers.BillingController.getBillsByUidAllGames
 POST        /v1/billing/getbyuidofgame        @controllers.BillingController.getBillsByUidOfGame
 
 #---------------------------------------------------------------------------------------------
