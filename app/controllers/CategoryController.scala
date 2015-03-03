@@ -19,7 +19,7 @@ class CategoryController (implicit inj: Injector) extends Controller with Inject
   def getAllCategory = Action {
     val list: List[CategoryModel] = category.getAllCategories()
     if (list != null)
-      Ok(Json.toJson(list))
+      Ok(Json.toJson(list.toString))
     else
       Ok(FailedStatus)
   }

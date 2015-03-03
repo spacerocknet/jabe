@@ -9,6 +9,7 @@ import play.api.mvc.{Action, Controller}
 import scaldi.{Injector, Injectable}
 import spacerock.constants.Constants
 import spacerock.persistence.cassandra._
+import spacerock.utils.IdGenerator
 
 /**
  * Created by william on 2/23/15.

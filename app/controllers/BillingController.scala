@@ -83,7 +83,7 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
       else
         result = billing.getAllBillsOfUser(uid)
       if (result != null) {
-        Ok(Json.toJson(result))
+        Ok(Json.toJson(result.toString()))
       } else {
         Ok("{}")
       }
@@ -117,7 +117,7 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
         result = billing.getBillsOfUserFromGameWithDate(uid, gameId, new Date(from), new Date(to))
       }
       if (result != null) {
-        Ok(Json.toJson(result))
+        Ok(Json.toJson(result.toString()))
       } else {
         Ok("{}")
       }

@@ -9,8 +9,8 @@ GET         /                                 @controllers.Application.index
 GET         /v1/game/:game_id                 @controllers.GameController.getGameInfo(game_id: Int)
 GET         /v1/gamebyname/:game_name         @controllers.GameController.getGameInfoByName(game_name: String)
 POST        /v1/game/saveresult               @controllers.GameController.addNewGameResult
-GET         /v1/game/getresult/:uid           @controllers.GameController.getGameResult(uid: String)
-POST         /v1/game/getresult               @controllers.GameController.getGameResult
+GET         /v1/game/getresult/:uid           @controllers.GameController.getGameResultByUid(uid: String)
+POST        /v1/game/getresult                @controllers.GameController.getGameResultByUidGame
 #---------------------------------------------------------------------------------------------
 # Category
 GET         /v1/cat/all                       @controllers.CategoryController.getAllCategory

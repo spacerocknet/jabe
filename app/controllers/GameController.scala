@@ -24,7 +24,7 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
        val gameString = Json.obj(
                         "game-name" -> game.gameName,
                         "game-description" -> game.gameDescription,
-                        "categories" -> Json.toJson(game.categories),
+                        "categories" -> Json.toJson(game.categories.toString()),
                         "battles-per-game" -> game.bpg
                      )
        Ok(gameString)
@@ -92,16 +92,15 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
    * @param uid user id
    * @return list of game result models (uid, game id, level, score) if success, otherwise empty json object
    */
-  def getGameResult (uid : String) = Action {
+  def getGameResultByUid (uid : String) = Action {
 
     val res: List[GameResultModel] = gResult.getResultsByUid(uid)
     if (uid != null) {
       if (res == null) {
         ServiceUnavailable("Service is currently unavailable")
       }
-      val gameString = Json.obj(
-        "results" -> Json.toJson(res)
-      )
+      val gameString = Json.toJson(res.toString)
+
       Ok(gameString)
     } else {
       Ok("{}")
@@ -113,7 +112,7 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
    * This method is for getting score of all level in @game-id that @uid played.
    * @return map of level-score if success, otherwise Service unavailable, failed status or bad request
    */
-  def getGameResult () = Action { request =>
+  def getGameResultByUidGame () = Action { request =>
 
     try {
       val json: Option[JsValue] = request.body.asJson
@@ -124,10 +123,23 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
       if (uid != "" && gid > 0) {
         val r: Map[Int, Long] = gResult.getResultsByUidOfGame(uid, gid)
 
-        if (r != null)
-          Ok(Json.toJson(r))
-        else
+        if (r != null) {
+          val sb: StringBuilder = new StringBuilder
+          var count: Int = 0
+          val size: Int = r.size
+          sb.append("{")
+          r.foreach(kv => {
+            sb.append("""{"level": %d, "score": %d}""".format(kv._1, kv._2))
+            count = count + 1
+            if (count < size) {
+              sb.append(",")
+            }
+          })
+          sb.append("}")
+          Ok(sb.toString)
+        } else {
           ServiceUnavailable("Service is currently unavailable")
+        }
       }
       Ok(FailedStatus)
     }
