@@ -1,7 +1,11 @@
 package spacerock.utils
 
+import java.security.SecureRandom
+
+import play.api.libs.Crypto
 import scaldi.{Injector, Injectable}
-import spacerock.cache.Redis.RedisWrapper
+import spacerock.cache.redis.RedisWrapper
+import spacerock.constants.Constants
 import scala.collection.mutable
 import scala.util.Random
 
@@ -12,6 +16,8 @@ import scala.util.Random
 trait IdGenerator {
   def generateNextId(key: String): Long
   def generateNextBlock(key: String, amount: Int): Set[Long]
+  def generateAuthCode(uid: String, expiredTime: Long): String
+  def generateAuthCode(): String
 }
 
 /**
@@ -21,7 +27,6 @@ trait IdGenerator {
  */
 class UidGenerator (implicit inj: Injector) extends IdGenerator with Injectable {
   val rw: RedisWrapper = inject[RedisWrapper]
-  val rnd: Random = Random
   final val SUFFIX_SEED_NUMBER: Int = 4096 // 12 bit
   final val PREFIX_SEED_NUMBER: Int = 8 // 3 bit ==> it should be a server identity
   final val HIGH_ORDER_BITS_FILTER: Long = 0x07FFFFFFFFFFF000L
@@ -58,8 +63,8 @@ class UidGenerator (implicit inj: Injector) extends IdGenerator with Injectable 
   private def genIdFromLong(n: Long): Long = {
 
     val num: Long = (n << 12) & HIGH_ORDER_BITS_FILTER
-    val r1: Int = rnd.nextInt(SUFFIX_SEED_NUMBER)
-    var r2: Long = rnd.nextInt(PREFIX_SEED_NUMBER)
+    val r1: Int = CustomizedRandom.nextInt(SUFFIX_SEED_NUMBER)
+    var r2: Long = CustomizedRandom.nextInt(PREFIX_SEED_NUMBER)
     r2 = (r2 << 59)
     var res: Long = num | r2
     res = res & r1
@@ -74,6 +79,38 @@ class UidGenerator (implicit inj: Injector) extends IdGenerator with Injectable 
   def decodeId(n: Long): Long = {
     val res = n & HIGH_ORDER_BITS_FILTER
     res >> 12
+  }
+
+  /**
+   * Generate auth code from uid, expired time and a random key
+   * @param uid user id
+   * @param expiredTime code's expired time
+   * @param n random integer
+   * @return encrypted code
+   */
+  private def genAuthCodeFromLong(uid: String, expiredTime: Long, n: Long): String = {
+    val fmt: String = "{%s-%d-%d}"
+    val input: String = fmt.format(uid, expiredTime, n)
+    Crypto.encryptAES(input, StaticVariables.pk)
+  }
+
+  /**
+   * Generate auth code with uid, expiredTime
+   * @param uid user id
+   * @param expiredTime expired time
+   * @return encrypted auth code
+   */
+  override def generateAuthCode(uid: String, expiredTime: Long): String = {
+    val n: Long = CustomizedRandom.nextLong
+    genAuthCodeFromLong(uid, expiredTime, n)
+  }
+
+  /**
+   * Generate a signed token
+   * @return
+   */
+  override def generateAuthCode(): String = {
+    CustomizedRandom.nextBase64String(Constants.AUTH_CODE_LENGTH)
   }
 }
 

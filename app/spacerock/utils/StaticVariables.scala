@@ -10,4 +10,6 @@ object StaticVariables {
   val freeIds: ListBuffer[String] = new ListBuffer[String]
   // server id
   val serverId: Int = 1
+  // encrypt key
+  var pk: String = "kfjfklsdajflksajfdlksafjslka"
 }

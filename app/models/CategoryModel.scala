@@ -8,10 +8,11 @@ import play.api.libs.json.Json
 case class CategoryModel (category: String, description: String, gameIds: List[Int]) {
   final val fmt =
     """
-      |
-      |"{category" : "%s",
+      |"{
+      |category" : "%s",
       |"description" : "%s",
-      |"game-ids" : %s}
+      |"game-ids" : %s
+      |}
     """.stripMargin
   override def toString(): String = {
     fmt.format(category, description, Json.toJson(gameIds))

@@ -1,4 +1,4 @@
-package spacerock.cache.Redis
+package spacerock.cache.redis
 
 import play.Logger
 import redis.clients.jedis.Jedis

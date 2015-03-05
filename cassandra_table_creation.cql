@@ -216,3 +216,20 @@ AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.Sna
 
 CREATE INDEX phone_device on device(phone);
 CREATE INDEX uid_device on device(uid);
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// auth-code
+CREATE TABLE IF NOT EXISTS spacerock.authcode (
+	code text,
+	created_time timestamp,
+	expired_time timestamp,
+	status boolean,
+	PRIMARY KEY (code)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};

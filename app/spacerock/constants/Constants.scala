@@ -14,4 +14,6 @@ object Constants {
   val MAX_UID_BLOCK_SIZE: Int = 1000
 
   val MAX_LOCK_TRIES: Int = 10
+
+  val AUTH_CODE_LENGTH: Int = 12
 }

@@ -1,7 +1,7 @@
 package modules
 
 import scaldi.Module
-import spacerock.cache.Redis.{RedisWrapperDAO, RedisWrapper}
+import spacerock.cache.redis.{RedisWrapperDAO, RedisWrapper}
 import spacerock.persistence.cassandra._
 import spacerock.utils.{IdGenerator, UidGenerator}
 
@@ -20,5 +20,6 @@ class UserModule extends Module {
   // cache
   bind [RedisWrapper] to new RedisWrapperDAO
   bind [IdGenerator] to new UidGenerator
+  bind [AuthCode] to new AuthCodeDAO
 
 }

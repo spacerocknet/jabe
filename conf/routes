@@ -43,7 +43,10 @@ POST        /v1/billing/getallbyuid           @controllers.BillingController.get
 POST        /v1/billing/getbyuidofgame        @controllers.BillingController.getBillsByUidOfGame
 
 #---------------------------------------------------------------------------------------------
-# sku
+# auth
+GET         /v1/auth/request                  @controllers.AuthCodeController.generateAuthCode
+GET         /v1/auth/validate/:code           @controllers.AuthCodeController.validateAuthCode(code: String)
+# GET         /v1/auth/clearcode/:code          @controllers.AuthCodeController.clearToken(code: String)
 
 #---------------------------------------------------------------------------------------------
 # sku
