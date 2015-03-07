@@ -1,15 +1,15 @@
 jabe
 ====
 I. Compile, build, and deploy
- a. Play Framework version 2.2.x
- b. To test:
+  1. Play Framework version 2.2.x
+  2. To test:
     play run
- c. To deploy
-    1. build: play clean compile dist
-    2. deploy the file under target directory
+  3. To deploy
+    a. build: play clean compile dist
+    b. deploy the file under target directory
     
 II. API Service
-   1. Get config
+  1. Get config
      Request: GET /v1/quiz/config
 
      Response:
@@ -20,13 +20,13 @@ II. API Service
               }   
 
 
-   2. Get categories
+  2. Get categories
      Request: GET /v1/quiz/categories
      Response:
                  ["Geo", "Movies", "Musics"]
 
 
-   3. Get Random Quizzes for a single category:
+  3. Get Random Quizzes for a single category:
      Request: 
       POST   /v1/quiz/request
         {
@@ -50,7 +50,7 @@ II. API Service
       curl -X POST  -H "Accept: Application/json" -H "Content-Type: application/json" --header "Authorization: Basic x"   http://localhost:9000/v1/quiz/request  -d '{"userId":1,"category":"Musics","num":1}'
 
 
-   4. Update a game's result 
+  4. Update a game's result 
       Request:
        POST /v1/quiz/result
          {
@@ -62,7 +62,7 @@ II. API Service
          {  status: "Ok"}
 
 
-   5. Add a question into the system
+  5. Add a question into the system
      Request:
       POST /quiz/add
        {
