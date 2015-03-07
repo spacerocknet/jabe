@@ -10,20 +10,22 @@ I. Compile, build, and deploy
     
 II. API Service
   1. Get config
-     Request: GET /v1/quiz/config
+     Request: 
+        GET /v1/quiz/config
 
      Response:
-             {
-                   categories:  ["Geo", "Movies", "Musics"],
-                   battles_per_game: 5,
+        {
+            categories:  ["Geo", "Movies", "Musics"],
+           battles_per_game: 5,
                    
-              }   
+        }   
 
 
   2. Get categories
-     Request: GET /v1/quiz/categories
+     Request: 
+         GET /v1/quiz/categories
      Response:
-                 ["Geo", "Movies", "Musics"]
+        ["Geo", "Movies", "Musics"]
 
 
   3. Get Random Quizzes for a single category:
