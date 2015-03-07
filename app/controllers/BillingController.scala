@@ -4,7 +4,7 @@ import java.util.Date
 
 import models.{SkuModel, BillingRecordModel}
 import play.api.Logger
-import play.api.libs.json.{JsValue, Json}
+import play.api.libs.json.{JsObject, JsValue, Json}
 import play.api.mvc.{Action, Controller}
 import scaldi.{Injector, Injectable}
 import spacerock.persistence.cassandra._
@@ -22,6 +22,7 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
   val idLocker = inject [CassandraLock]
   val billing = inject [Billing]
   val sku = inject [Sku]
+  implicit val billFmt = Json.format[BillingRecordModel]
 
   /**
    * Add new billing info. This method use REST POST method with json body includes: uid, game-id, timestamp, sku-id,
@@ -30,6 +31,7 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
    * @return Ok status if success, otherwise bad request, failed status, service unavailable
    */
   def addNewBill() = Action { request =>
+    var retObj: JsObject = FailedStatus
     try {
       val json: Option[JsValue] = request.body.asJson
 
@@ -37,25 +39,31 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
       val gameId: Int = (json.getOrElse(null) \ "game-id").asOpt[Int].getOrElse(-1)
       val ts: Long = (json.getOrElse(null) \ "timestamp").asOpt[Long].getOrElse(System.currentTimeMillis())
       val skuId: Int = (json.getOrElse(null) \ "sku-id").asOpt[Int].getOrElse(-1)
-      val nItems: Int = (json.getOrElse(null) \ "number-of-items").asOpt[Int].getOrElse(-1)
+      val nItems: Int = (json.getOrElse(null) \ "num-items").asOpt[Int].getOrElse(-1)
       val totalDiscount: Float = (json.getOrElse(null) \ "discount").asOpt[Float].getOrElse(0.0f)
 
       if (uid.equals("") || gameId < 0 || skuId < 0 || nItems < 0) {
-        BadRequest("Please fill all required fields")
+        Logger.warn("Invalid request. Some fields are not filled. %s" + json.toString)
       } else {
         // check sku
         val skuModel: SkuModel = sku.getSkuInfo(skuId)
         if(skuModel != null) {
-          if (skuModel.expiredTime.getTime >= ts && skuModel.startTime.getTime <= ts) { // valid
+          if (skuModel.expiredTime.getTime >= ts && skuModel.startTime.getTime <= ts) {
+            // valid
             if (billing.addNewBill(uid, new Date(ts), gameId, skuId, nItems, totalDiscount)) {
-              Ok(OkStatus)
+              retObj = OkStatus
+            } else {
+              Logger.warn("Cannot add new billing record to database. Please check again. %s"
+                          format json.toString)
             }
+          } else {
+            Logger.warn("Request to invalid sku. %s" format json.toString)
           }
         } else {
-          BadRequest("Please check the request again.")
+          Logger.warn("Request to invalid sku. %s" format json.toString)
         }
-        Ok(FailedStatus)
-        }
+      }
+      Ok(retObj)
     } catch {
       case e:Exception => {
         Logger.error("exception = %s" format e)
@@ -82,10 +90,11 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
         result = billing.getAllBillsOfUserWithDate(uid, new Date(from), new Date(to))
       else
         result = billing.getAllBillsOfUser(uid)
+
       if (result != null) {
-        Ok(Json.toJson(result.toString()))
+        Ok(Json.toJson(result))
       } else {
-        Ok("{}")
+        Ok(Json.obj())
       }
     } catch {
       case e: Exception => {
@@ -117,9 +126,9 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
         result = billing.getBillsOfUserFromGameWithDate(uid, gameId, new Date(from), new Date(to))
       }
       if (result != null) {
-        Ok(Json.toJson(result.toString()))
+        Ok(Json.toJson(result))
       } else {
-        Ok("{}")
+        Ok(Json.obj())
       }
     } catch {
       case e: Exception => {

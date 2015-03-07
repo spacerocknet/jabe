@@ -14,6 +14,7 @@ case class CategoryModel (category: String, description: String, gameIds: List[I
       |"game-ids" : %s
       |}
     """.stripMargin
+
   override def toString(): String = {
     fmt.format(category, description, Json.toJson(gameIds))
   }

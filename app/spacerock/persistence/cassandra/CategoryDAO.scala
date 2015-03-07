@@ -6,6 +6,7 @@ import play.Logger
 import scaldi.{Injectable, Injector}
 
 import scala.collection.JavaConversions._
+import scala.collection.immutable.HashSet
 import scala.collection.mutable
 
 /**
@@ -16,6 +17,8 @@ trait Category {
   def getCategoryByName(category: String): CategoryModel
   def addNewCategory(category: String, description: String): Boolean
   def updateCategory(category: String, gameId: Int, description: String): Boolean
+  def addNewGames(category: String, gameIds: Set[Int]): Boolean
+  def addNewGame(category: String, gameId: Int): Boolean
   def getAllCategories(): List[CategoryModel]
   def close()
 }
@@ -29,6 +32,36 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
 
   val isConnected: Boolean = connect("127.0.0.1")
 
+  /**
+   * Add new games to game list of category
+   * @param category category name
+   * @param gameIds game id list
+   * @return true if success, false otherwise
+   */
+  override def addNewGames(category: String, gameIds: Set[Int]): Boolean = {
+    val ps: PreparedStatement = pStatements.getOrElse("AddGameIdsToCategory", null)
+    if (ps == null || !isConnected) {
+      Logger.error("Cannot connect to database")
+      return false
+    }
+    val bs: BoundStatement = new BoundStatement(ps)
+    bs.setString("category", category)
+    bs.setSet("game_list", gameIds)
+
+    session.execute(bs)
+    true
+  }
+
+  /**
+   * Add new game to game list of category
+   * @param category category name
+   * @param gameId game id
+   * @return true if success, false otherwise
+   */
+  override def addNewGame(category: String, gameId: Int): Boolean = {
+    val gameIds: Set[Int] = HashSet(gameId)
+    addNewGames(category, gameIds)
+  }
 
   /**
    * Update category with game id list and description
@@ -116,9 +149,11 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
     val result: ResultSet = session.execute(bs)
     val l: scala.collection.mutable.ListBuffer[CategoryModel] = scala.collection.mutable.ListBuffer()
     for (r: Row <- result.all()) {
-      l.add(new CategoryModel(r.getString("category"),
-        r.getString("description"),
-        r.getSet( "game_list", classOf[Integer]).toList.map(ii => ii * 1)))
+      if (r != null) {
+        l.add(new CategoryModel(r.getString("category"),
+          r.getString("description"),
+          r.getSet("game_list", classOf[Integer]).toList.map(ii => ii * 1)))
+      }
     }
 
     l.toList
@@ -148,8 +183,12 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
       "game_list = game_list + ? where category = ?;")
     pStatements.put("UpdateCategory", ps)
 
+    ps = session.prepare("UPDATE spacerock.categories SET " +
+      "game_list = game_list + ? where category = ?;")
+    pStatements.put("AddGameIdsToCategory", ps)
+
     // Add new category
-    ps = session.prepare("INSERT INTO spacerock.categories (category, description) VALUES (?, ?) IF NOT EXIST;")
+    ps = session.prepare("INSERT INTO spacerock.categories (category, description) VALUES (?, ?) IF NOT EXISTS;")
     pStatements.put("AddNewCategory", ps)
 
     // Get category info

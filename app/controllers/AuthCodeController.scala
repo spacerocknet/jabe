@@ -4,7 +4,7 @@ import java.util.Date
 
 import models.TokenInfo
 import play.Logger
-import play.api.libs.json.{Json, JsValue}
+import play.api.libs.json.{JsObject, Json, JsValue}
 import play.api.mvc.{Action, Controller}
 import scaldi.{Injector, Injectable}
 import spacerock.persistence.cassandra.AuthCode
@@ -21,54 +21,65 @@ class AuthCodeController (implicit inj: Injector) extends Controller with Inject
 
   /**
    * Serve for generating auth token, insert into database and send the token back to client
-   * @return auth code if success, otherwise false
+   * @return auth code if success, otherwise failed status or service unavailable
    */
   def generateAuthCode = Action { request =>
+    var retObj: JsObject = null
     try {
       val json: Option[JsValue] = request.body.asJson
-//      val uid: String = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")
       val expiredTime: Long = (json.getOrElse(null) \ "expired-time").asOpt[Long].getOrElse(-1)
       // generate id
-//      if (uid == null || uid.equals("") || expiredTime < 0) {
       if (expiredTime < 0) {
         Logger.error("Malformed request: %s" format json.toString)
-        Ok(FailedStatus)
+        retObj = FailedStatus
       } else {
         val authCode: String = idGenerator.generateAuthCode()
         val curTime = System.currentTimeMillis()
         if (curTime > expiredTime) {
-          Ok(FailedStatus)
+          retObj = FailedStatus
         } else {
           auth.addNewCode(authCode, new Date(curTime), new Date(expiredTime), true, expiredTime - curTime)
-          Ok(Json.obj("auth-code" -> authCode))
+          retObj = Json.obj("auth-code" -> authCode)
         }
       }
+      Ok(retObj)
     } catch {
-      case e: Exception => {Logger.error("exception = %s" format e)}
+      case e: Exception => {
+        Logger.error("exception = %s" format e)
+        ServiceUnavailable("Service is currently unavailable")
+      }
     }
-    ServiceUnavailable("Service is currently unavailable")
   }
 
   /**
    * Validate auth code. The method will check if the code exists or not first,
    * and then validate the time
-   * @param code auth code to check
    * @return Ok status if success, failed status or service unavailable otherwise
    */
-  def validateAuthCode(code: String) = Action {
+  def validateAuthCode = Action { request =>
+    var retObj: JsObject = FailedStatus
     try {
-      val token: TokenInfo = auth.getAuthCode(code)
-      val curTime = System.currentTimeMillis()
-      if (token != null) {
-        if (token.expiredTime.getTime >= curTime && token.createdTime.getTime <= curTime) {
-          Ok(OkStatus)
+      val json: Option[JsValue] = request.body.asJson
+      val code: String = (json.getOrElse(null) \ "auth-code").asOpt[String].getOrElse("")
+      if (!code.equals("")) {
+        val token: TokenInfo = auth.getAuthCode(code)
+        val curTime = System.currentTimeMillis()
+        if (token != null) {
+          if (token.expiredTime.getTime >= curTime && token.createdTime.getTime <= curTime) {
+            retObj = OkStatus
+          }
+        } else {
+          Logger.warn("Validate a expired token: %s" format code)
+          retObj = FailedStatus
         }
       }
-      Ok(FailedStatus)
+      Ok(retObj)
     } catch {
-      case e: Exception => Logger.error("exception = %s" format e)
-    }
-    ServiceUnavailable("Service is currently unavailable")
+      case e: Exception => {
+        Logger.error("exception = %s" format e)
+        ServiceUnavailable("Service is currently unavailable")
+      }
+      }
   }
 
   /**
@@ -77,15 +88,19 @@ class AuthCodeController (implicit inj: Injector) extends Controller with Inject
    * @return
    */
   def clearToken(code: String) = Action {
+    var retObj: JsObject = null
     try {
       if (auth.updateExpiredTime(code, new Date(System.currentTimeMillis()))) {
-        Ok(OkStatus)
+        retObj = OkStatus
       } else {
-        Ok(FailedStatus)
+        retObj = FailedStatus
       }
+      Ok(retObj)
     } catch {
-      case e: Exception => {Logger.error("exception = %s" format e)}
+      case e: Exception => {
+          Logger.error("exception = %s" format e)
+          ServiceUnavailable("Service is currently unavailable")
+      }
     }
-    ServiceUnavailable("Service is currently unavailable")
   }
 }

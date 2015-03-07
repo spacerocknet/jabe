@@ -1,13 +1,11 @@
 package spacerock.utils
 
-import java.security.SecureRandom
-
 import play.api.libs.Crypto
-import scaldi.{Injector, Injectable}
+import scaldi.{Injectable, Injector}
 import spacerock.cache.redis.RedisWrapper
 import spacerock.constants.Constants
+
 import scala.collection.mutable
-import scala.util.Random
 
 /**
  * Created by william on 2/24/15.
@@ -49,7 +47,7 @@ class UidGenerator (implicit inj: Injector) extends IdGenerator with Injectable 
   override def generateNextBlock(key: String, amount: Int): Set[Long] = {
     val result: mutable.HashSet[Long] = new mutable.HashSet[Long]
 
-    for (i <- 0 to amount) {
+    for (i <- 0 until amount) {
       result.add(genIdFromLong(rw.getNextId(key)))
     }
     result.toSet
@@ -67,7 +65,7 @@ class UidGenerator (implicit inj: Injector) extends IdGenerator with Injectable 
     var r2: Long = CustomizedRandom.nextInt(PREFIX_SEED_NUMBER)
     r2 = (r2 << 59)
     var res: Long = num | r2
-    res = res & r1
+    res = res | r1
     res
   }
 

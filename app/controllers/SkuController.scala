@@ -4,7 +4,7 @@ import java.util.Date
 
 import models.SkuModel
 import play.Logger
-import play.api.libs.json.{JsValue, Json}
+import play.api.libs.json.{JsObject, JsValue, Json}
 import play.api.mvc.{Action, Controller}
 import scaldi.{Injector, Injectable}
 import spacerock.constants.Constants
@@ -22,17 +22,19 @@ class SkuController(implicit inj: Injector) extends Controller with Injectable {
   val uidBlock = inject [UidBlock]
   val idLocker = inject [CassandraLock]
   val sku = inject [Sku]
+  implicit val skuFmt = Json.format[SkuModel]
 
   /**
    * Add new Sku info. Json body contains; description, unit-price, start-time, expired-time, extra-date, description.
    * Also the method will generate sku's id based on key of redis, using IdGenerator.
    * @return sku-id if success, otherwise failed status, service unavailable otherwise.
    */
-  def addNewSku() = Action { request =>
+  def addNewSku = Action { request =>
+    var retObj: JsObject = FailedStatus
     try {
       val json: Option[JsValue] = request.body.asJson
       // get id
-      val skuId: Int = idGenerator.generateNextId(Constants.REDIS_SKY_ID_KEY).toInt
+      val skuId: Int = idGenerator.generateNextId(Constants.REDIS_SKU_ID_KEY).toInt
       val description: String = (json.getOrElse(null) \ "description").asOpt[String].getOrElse("")
       val unitPrice: Float = (json.getOrElse(null) \ "unit-price").asOpt[Float].getOrElse(0.0f)
       val startTime: Long = (json.getOrElse(null) \ "start-time").asOpt[Long].getOrElse(-1)
@@ -42,10 +44,11 @@ class SkuController(implicit inj: Injector) extends Controller with Injectable {
 
       if (sku.addNewSku(skuId, description, unitPrice, new Date(startTime), new Date(expiredTime),
                     extraData, discount)) {
-        Ok("""{"sku-id" : %d}""" format skuId)
+        retObj = Json.obj("sku-id" -> skuId)
       } else {
-        Ok(FailedStatus)
+        Logger.warn("Cannot add new sku. Please check database again")
       }
+      Ok(retObj)
     } catch {
       case e: Exception => {
         Logger.error("exception = %s" format e)
@@ -62,7 +65,7 @@ class SkuController(implicit inj: Injector) extends Controller with Injectable {
   def getSkuInfo(skuId: Int) = Action {
     val res: SkuModel = sku.getSkuInfo(skuId)
     if (res != null) {
-      Ok(res.toString)
+      Ok(Json.toJson(res))
     } else {
       Ok(FailedStatus)
     }

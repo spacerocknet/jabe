@@ -212,13 +212,17 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     bs.setString("user_name", userName)
     val result: ResultSet = session.execute(bs)
     val row: Row = result.one()
-    val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
-      row.getString("os"), row.getString("model"),
-      row.getString("phone"),row.getString("device_uuid"), row.getString("email"),
-      row.getString("fb_id"), row.getString("state"),
-      row.getString("region"), row.getString("country"), row.getString("apps"))
-    subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
-    subscriber
+    if (row != null) {
+      val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
+        row.getString("os"), row.getString("model"),
+        row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
+        row.getString("fb_id"), row.getString("state"),
+        row.getString("region"), row.getString("country"), row.getString("apps"))
+      subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
+      subscriber
+    } else {
+      null
+    }
   }
 
   /**
@@ -235,14 +239,15 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     val result: ResultSet = session.execute(bs)
     val l: scala.collection.mutable.ListBuffer[SubscriberModel] = scala.collection.mutable.ListBuffer()
     for (row: Row <- result.all()) {
-      val sm: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
-        row.getString("os"), row.getString("model"),
-        row.getString("phone"),row.getString("device_uuid"), row.getString("email"),
-        row.getString("fb_id"), row.getString("state"),
-        row.getString("region"), row.getString("country"), row.getString("apps"))
-      sm.deviceSet = row.getSet("device_list", classOf[String]).toSet
-      l.add(sm)
-
+      if (row != null) {
+        val sm: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
+          row.getString("os"), row.getString("model"),
+          row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
+          row.getString("fb_id"), row.getString("state"),
+          row.getString("region"), row.getString("country"), row.getString("apps"))
+        sm.deviceSet = row.getSet("device_list", classOf[String]).toSet
+        l.add(sm)
+      }
     }
     l.toList
   }

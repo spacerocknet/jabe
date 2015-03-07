@@ -47,8 +47,9 @@ class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
 
   def init() = {
     // Insert new auth code
-    var ps: PreparedStatement = session.prepare("INSERT INTO spacerock.authcode (code, created_time, expired_time, status) " +
-      "VALUES (?, ?, ?, ?) IF NOT EXISTS;")
+    var ps: PreparedStatement = session.prepare("INSERT INTO spacerock.authcode " +
+                                "(code, created_time, expired_time, status) " +
+                                "VALUES (?, ?, ?, ?) IF NOT EXISTS;")
     pStatements.put("AddNewCode", ps)
 
     // Get auth code info
@@ -56,15 +57,15 @@ class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
     pStatements.put("GetAuthCode", ps)
 
     // Update status
-    ps = session.prepare("UPDATE spacerock.authcode SET status = ? WHERE code = ? IF EXISTS;")
+    ps = session.prepare("INSERT INTO spacerock.authcode (code, status) VALUES (?, ?);")
     pStatements.put("UpdateStatus", ps)
 
-    // Update status
-    ps = session.prepare("UPDATE spacerock.authcode SET created_time = ? WHERE code = ? IF EXISTS;")
+    // Update created time
+    ps = session.prepare("INSERT INTO spacerock.authcode (code, created_time) VALUES (?, ?);")
     pStatements.put("UpdateCreatedTime", ps)
 
     // Update status
-    ps = session.prepare("UPDATE spacerock.authcode SET expired_time = ? WHERE code = ? IF EXISTS;")
+    ps = session.prepare("INSERT INTO spacerock.authcode (code, expired_time) VALUES (?, ?);")
     pStatements.put("UpdateExpiredTime", ps)
 
   }
@@ -116,9 +117,9 @@ class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
     val res: ResultSet = session.execute(bs)
     val row: Row = res.one()
     if (row != null) {
-      return new TokenInfo(row.getString("code"), row.getDate("created_time"), row.getDate("expired_time"), row.getBool("status"))
+      return new TokenInfo(code, row.getDate("created_time"), row.getDate("expired_time"), row.getBool("status"))
     }
-    Logger.warn("Cannot find token in db OR token is expired")
+    Logger.warn("Cannot find token in db")
     null
   }
 

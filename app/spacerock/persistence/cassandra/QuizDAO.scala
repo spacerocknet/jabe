@@ -12,7 +12,7 @@ import scala.collection.JavaConversions._
 
 trait Quiz {
   def getQuizByQid(qid: Long): QuAnModel
-  def getQuizzesByCategory(category: String): List[QuAnModel]
+  def getQuizzesByCategory(category: String, num: Int): List[QuAnModel]
   def addNewQuiz(qid: Long, category: String, question: String, correctAns: String,
                  ans1: String, ans2: String, ans3: String, df: Int): Boolean
   def updateQuiz(qid: Long, category: String, question: String, correctAns: String,
@@ -109,15 +109,15 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     } else {
       null
     }
-
   }
 
   /**
    * Get all quizzes of requested category
    * @param category category name
+   * @param num number of item will be returned
    * @return list of QuAn model if success, otherwise null
    */
-  override def getQuizzesByCategory(category: String): List[QuAnModel] = {
+  override def getQuizzesByCategory(category: String, num: Int): List[QuAnModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetQuizzesByCategory", null)
     if (ps == null || !isConnected) {
       Logger.error("Cannot connect to database")
@@ -125,14 +125,16 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString(0, category)
-    bs.setInt(1, 2)
+    bs.setInt(1, num)
     val result: ResultSet = session.execute(bs)
     val l: scala.collection.mutable.ListBuffer[QuAnModel] = scala.collection.mutable.ListBuffer()
 
     for (r: Row <- result.all()) {
-      l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
-        r.getString("right_answer"),
-        r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
+      if (r != null) {
+        l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
+          r.getString("right_answer"),
+          r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
+      }
     }
     l.toList
   }
@@ -152,10 +154,11 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     val l: scala.collection.mutable.ListBuffer[QuAnModel] = scala.collection.mutable.ListBuffer()
 
     for (r: Row <- result.all()) {
-
-      l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
-        r.getString("right_answer"),
-        r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
+      if (r != null) {
+        l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
+          r.getString("right_answer"),
+          r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
+      }
     }
     l.toList
   }
@@ -191,6 +194,7 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     // Get quizzes info
     ps = session.prepare("SELECT * from spacerock.quizzes where qid = ?;")
     pStatements.put("GetQuizByQid", ps)
+
     ps = session.prepare("SELECT * from spacerock.quizzes where category = ? LIMIT ? ALLOW FILTERING;")
     pStatements.put("GetQuizzesByCategory", ps)
 

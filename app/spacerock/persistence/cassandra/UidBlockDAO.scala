@@ -169,7 +169,9 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
     bs.setBool("status", false)
     val result: ResultSet = session.execute(bs)
     for (r: Row <- result.all()) {
-      return r.getInt("block_id")
+      if (r != null) {
+        return r.getInt("block_id")
+      }
     }
     -1
   }

@@ -12,7 +12,7 @@ case class BillingRecordModel (uid: String, ts: Date, gameId: Int, skuId: Int, n
       |"timestamp" : "%s",
       |"game_id" : %d,
       |"sku-id" : %d,
-      |"number-of-items" : %d,
+      |"num-items" : %d,
       |"total-discount" : %.3f
       |}""".stripMargin)
   override def toString(): String = {

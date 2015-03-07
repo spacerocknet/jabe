@@ -6,19 +6,19 @@ import play.api.libs.json._
 import play.api.mvc.{Controller, _}
 import scaldi.{Injectable, Injector}
 import spacerock.constants.Constants
-import spacerock.persistence.cassandra.{Category, Quiz, UserData}
+import spacerock.persistence.cassandra.{Category, Quiz}
 import spacerock.utils.IdGenerator
 
-import scala.collection.JavaConversions._
+import scala.collection.mutable
 import scala.util.Random
 
 class QuizController(implicit inj: Injector) extends Controller with Injectable {
-  val userDao = inject [UserData]
   val category = inject[Category]
   val quiz = inject[Quiz]
   val OkStatus = Json.obj("status" -> "OK")
   val FailedStatus = Json.obj("status" -> "Failed")
   val idGenerator = inject [IdGenerator]
+  implicit val quizFmt = Json.format[QuAnModel]
 
   /**
    * Request a number of quizzes by category. json body contains: category and number of requested quiz.
@@ -38,19 +38,18 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
        } else {
          val r: Random = new Random()
          var seq = Seq[JsObject]()
-         val questions: List[QuAnModel] = quiz.getQuizzesByCategory(cat)
+         val questions: mutable.Buffer[QuAnModel] = quiz.getQuizzesByCategory(cat, num).toBuffer
          if (questions != null) {
            for (i <- 0 until num) {
              if (questions.size > 0) {
-               val index = Math.abs(r.nextInt()) % questions.size
-               val q = questions.get(index)
+               val index: Int = Math.abs(r.nextInt()) % questions.size
+               val q = questions.remove(index)
                val jsonObj = Json.obj("category" -> q.category,
                  "qid" -> q.qid,
                  "question" -> q.question,
                  "answers" -> Json.arr(q.correctAns, q.ans1, q.ans2, q.ans3),
                  "df" -> JsNumber(q.df)
                )
-               println(jsonObj)
                seq = seq :+ jsonObj
              }
            }
@@ -59,6 +58,7 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
        }
     } catch {
       case e:Exception => {
+        e.printStackTrace()
         Logger.info("exception = %s" format e)
         BadRequest("Invalid EAN")
       }
@@ -126,14 +126,16 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
 
   /**
    * Get quizzes by category
-   * @param catName
    * @return array of quizzes if success, otherwise Bad request
    */
-  def getQuizByCategory (catName: String) = Action {
+  def getQuizByCategory = Action { request =>
     try {
+      val json: Option[JsValue] = request.body.asJson
+
+      val catName = (json.getOrElse(null) \ "category").asOpt[String].getOrElse("")
       if (catName != null) {
         var seq = Seq[JsObject]()
-        val l: List[QuAnModel] = quiz.getQuizzesByCategory(catName)
+        val l: List[QuAnModel] = quiz.getQuizzesByCategory(catName, Constants.DEFAULT_RESULT_SIZE)
         for(q <- l) {
           val jsonObj = Json.obj("category" -> q.category,
                                  "qid" -> q.qid,
@@ -163,9 +165,9 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
    * @return quiz's id if success, otherwise Bad request, failed status
    */
   def addNewQuiz = Action { request =>
+    var retObj: JsObject = FailedStatus
     try {
       val json: Option[JsValue] = request.body.asJson
-      println(json)
       val qid: Long = idGenerator.generateNextId(Constants.REDIS_QUIZ_ID_KEY)
 
       val cat = (json.getOrElse(null) \ "category").asOpt[String].getOrElse("")
@@ -183,13 +185,12 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
           if (category.addNewCategory(cat, "")) {
             Logger.info("Add category: %s successfully" format cat)
           }
-          Ok(""" {"qid": %d} """ format qid)
-        } else {
-          Ok(FailedStatus)
+          retObj = Json.obj("qid" -> qid)
         }
       } else {
-        BadRequest(FailedStatus)
+        Logger.warn("Bad request. %s" format json.toString)
       }
+      Ok(retObj)
     } catch {
       case e: Exception => {
         Logger.error("exception = %s" format e)
@@ -203,6 +204,7 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
    * @return quiz's id if success, otherwise Failed status, bad request.
    */
   def updateQuiz = Action { request =>
+    var retObj: JsObject = FailedStatus
     try {
       val json: Option[JsValue] = request.body.asJson
       val qid: Long = (json.getOrElse(null) \ "qid").asOpt[Long].getOrElse(-1)
@@ -217,12 +219,11 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
       if ((category != null) && (qid >= 0)) {
         val res: Boolean = quiz.updateQuiz(qid, category, question, rightAns, ans1, ans2, ans3, df)
         if (res)
-          Ok("""{"qid": %d}""" format qid)
-        else
-          Ok(FailedStatus)
+          retObj = Json.obj("qid" -> qid)
       } else {
-        BadRequest("Cannot update quiz %s" format json)
+        Logger.warn("Bad request. %s" format json)
       }
+      Ok(retObj)
     } catch {
       case e: Exception => {
         Logger.error("exception = %s" format e)

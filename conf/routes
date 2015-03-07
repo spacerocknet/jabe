@@ -6,20 +6,21 @@
 GET         /                                 @controllers.Application.index
 #---------------------------------------------------------------------------------------------
 # Game
+POST        /v1/game/add                      @controllers.GameController.addNewGameInfo
 GET         /v1/game/:game_id                 @controllers.GameController.getGameInfo(game_id: Int)
-GET         /v1/gamebyname/:game_name         @controllers.GameController.getGameInfoByName(game_name: String)
+POST        /v1/game/byname                    @controllers.GameController.getGameInfoByName
 POST        /v1/game/saveresult               @controllers.GameController.addNewGameResult
 GET         /v1/game/getresult/:uid           @controllers.GameController.getGameResultByUid(uid: String)
 POST        /v1/game/getresult                @controllers.GameController.getGameResultByUidGame
 #---------------------------------------------------------------------------------------------
 # Category
 GET         /v1/cat/all                       @controllers.CategoryController.getAllCategory
-GET         /v1/cat/:cat_name                 @controllers.CategoryController.getCategoryByName(cat_name: String)
+POST        /v1/cat/getbyname                 @controllers.CategoryController.getCategoryByName
 POST        /v1/cat/add                       @controllers.CategoryController.addCategory
 POST        /v1/cat/update                    @controllers.CategoryController.updateCategory
 #---------------------------------------------------------------------------------------------
 # User
-GET         /v1/user/byname/:user_name        @controllers.UserController.getUserInfoByUsername(user_name: String)
+POST         /v1/user/byname        @controllers.UserController.getUserInfoByUsername
 GET         /v1/user/byuid/:uid               @controllers.UserController.getUserInfoByUID(uid: String)
 GET         /v1/user/all                      @controllers.UserController.getAllUser
 POST        /v1/user/addnoinfo                @controllers.UserController.addUserWithoutInfo
@@ -28,7 +29,7 @@ POST        /v1/user/updateinfo               @controllers.UserController.update
 # Quizzes
 GET         /v1/quiz/all                      @controllers.QuizController.getAllQuiz
 GET         /v1/quiz/byid/:qid                @controllers.QuizController.getQuizById(qid: Long)
-GET         /v1/quiz/bycat/:cat               @controllers.QuizController.getQuizByCategory(cat: String)
+POST         /v1/quiz/bycat                 @controllers.QuizController.getQuizByCategory
 POST        /v1/quiz/request                  @controllers.QuizController.quizRequest
 POST        /v1/quiz/add                      @controllers.QuizController.addNewQuiz
 POST        /v1/quiz/update                   @controllers.QuizController.updateQuiz
@@ -44,8 +45,8 @@ POST        /v1/billing/getbyuidofgame        @controllers.BillingController.get
 
 #---------------------------------------------------------------------------------------------
 # auth
-GET         /v1/auth/request                  @controllers.AuthCodeController.generateAuthCode
-GET         /v1/auth/validate/:code           @controllers.AuthCodeController.validateAuthCode(code: String)
+POST        /v1/auth/request                  @controllers.AuthCodeController.generateAuthCode
+POST        /v1/auth/validate                 @controllers.AuthCodeController.validateAuthCode
 # GET         /v1/auth/clearcode/:code          @controllers.AuthCodeController.clearToken(code: String)
 
 #---------------------------------------------------------------------------------------------
