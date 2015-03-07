@@ -23,7 +23,7 @@ II. API Service
 
   2. Get categories
      Request: 
-         GET /v1/quiz/categories
+        GET /v1/quiz/categories
      Response:
         ["Geo", "Movies", "Musics"]
 
