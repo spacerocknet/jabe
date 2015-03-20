@@ -2,11 +2,12 @@ package spacerock.persistence.cassandra
 
 import java.util.Date
 
+import com.datastax.driver.core._
 import models.SkuModel
 import play.Logger
-import scaldi.{Injector, Injectable}
-import scala.collection.JavaConversions._
-import com.datastax.driver.core._
+import scaldi.{Injectable, Injector}
+import spacerock.constants.Constants
+
 /**
  * Created by william on 2/24/15.
  */
@@ -15,58 +16,36 @@ trait Sku {
                 expiredTime: Date, extraData: String, discount: Float): Boolean
   def addNewSku(sku: SkuModel): Boolean
   def getSkuInfo(skuId: Int): SkuModel
-  def close(): Unit
+  def lastError: Int
 }
 
 class SkuDAO (implicit inj: Injector) extends Sku with Injectable {
-  val clusterName = inject [String] (identified by "cassandra.cluster")
-  var cluster: Cluster = null
-  var session: Session = null
+  val sessionManager = inject [DbSessionManager]
   val pStatements: scala.collection.mutable.Map[String, PreparedStatement]
-  = scala.collection.mutable.Map[String, PreparedStatement]()
+                = scala.collection.mutable.Map[String, PreparedStatement]()
+  var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
-  val isConnected: Boolean = connect("127.0.0.1")
-
-  def connect(node: String): Boolean = {
-    cluster = Cluster.builder().addContactPoint(node).build()
-    val metadata = cluster.getMetadata()
-    var countHost: Int = 0
-    metadata.getAllHosts() map {
-      case host => countHost += 1
-    }
-    session = cluster.connect()
-
-    if (countHost < 1)
-      false
-    else {
-      init()
-      true
-    }
-  }
+  def lastError = _lastError
 
   def init() = {
+    _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Insert new sku record
-    var ps: PreparedStatement = session.prepare("INSERT INTO spacerock.sku (sku_id, description, unit_price," +
+    var ps: PreparedStatement = sessionManager.prepare("INSERT INTO spacerock.sku (sku_id, description, unit_price," +
       "start_time, expired_time, extra_data, discount) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?);")
-    pStatements.put("AddNewSku", ps)
+    if (ps != null)
+      pStatements.put("AddNewSku", ps)
+    else
+      _lastError = sessionManager.lastError
+
 
     // get sku info
-    ps = session.prepare("SELECT * FROM spacerock.sku WHERE sku_id = ?;")
-    pStatements.put("GetSkuInfo", ps)
+    ps = sessionManager.prepare("SELECT * FROM spacerock.sku WHERE sku_id = ?;")
+    if (ps != null)
+      pStatements.put("GetSkuInfo", ps)
+    else
+      _lastError = sessionManager.lastError
 
-//      // get sku by start time
-//      ps = session.prepare("SELECT * from spacerock.sku WHERE start_time <= ? ALLOW FILTERING;")
-//      pStatements.put("GetSkusByStartTime", ps)
-//
-//      // get sku by expired time
-//      ps = session.prepare("SELECT * from spacerock.sku WHERE expired_time <= ? ALLOW FILTERING;")
-//      pStatements.put("GetSkusByExpiredTime", ps)
-  }
-
-  override def close() = {
-    if (cluster != null)
-      cluster.close()
   }
 
 /**
@@ -83,7 +62,7 @@ class SkuDAO (implicit inj: Injector) extends Sku with Injectable {
   override def addNewSku(skuId: Int, description: String, unitPrice: Float, startTime: Date,
                           expiredTime: Date, extraData: String, discount: Float): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddNewSku", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
       Logger.error("Cannot connect to database")
       return false
     }
@@ -96,9 +75,13 @@ class SkuDAO (implicit inj: Injector) extends Sku with Injectable {
     bs.setString("extra_data", extraData)
     bs.setFloat("discount", discount)
 
-    session.execute(bs)
-
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
 /**
@@ -118,25 +101,31 @@ class SkuDAO (implicit inj: Injector) extends Sku with Injectable {
  */
   override def getSkuInfo(skuId: Int): SkuModel = {
     val ps: PreparedStatement = pStatements.getOrElse("GetSkuInfo", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setInt("sku_id", skuId)
-    val result: ResultSet = session.execute(bs)
-    val r: Row = result.one()
-    if (r != null) {
-      val sku: SkuModel = new SkuModel(r.getInt("sku_id"),
-                                       r.getString("description"),
-                                       r.getFloat("unit_price"),
-                                       r.getDate("start_time"),
-                                       r.getDate("expired_time"),
-                                       r.getString("extra_data"),
-                                       r.getFloat("discount"))
-      sku
-    } else {
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
       null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val r: Row = result.one()
+      if (r != null) {
+        val sku: SkuModel = new SkuModel(r.getInt("sku_id"),
+          r.getString("description"),
+          r.getFloat("unit_price"),
+          r.getDate("start_time"),
+          r.getDate("expired_time"),
+          r.getString("extra_data"),
+          r.getFloat("discount"))
+        sku
+      } else {
+        null
+      }
     }
   }
 }

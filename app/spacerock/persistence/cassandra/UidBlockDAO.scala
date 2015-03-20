@@ -3,6 +3,7 @@ package spacerock.persistence.cassandra
 import com.datastax.driver.core._
 import play.Logger
 import scaldi.{Injector, Injectable}
+import spacerock.constants.Constants
 import scala.collection.JavaConversions._
 
 /**
@@ -15,62 +16,56 @@ trait UidBlock {
   def freeBlock(blockId: Int): Boolean
   def updateStatus(blockId: Int, status: Boolean): Boolean
   def getNextBlockId(): Int
-  def close(): Unit
+  def lastError: Int
 }
 
 class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
-  val clusterName = inject [String] (identified by "cassandra.cluster")
-  var cluster: Cluster = null
-  var session: Session = null
+  val sessionManager = inject [DbSessionManager]
   val pStatements: scala.collection.mutable.Map[String, PreparedStatement]
-  = scala.collection.mutable.Map[String, PreparedStatement]()
+                  = scala.collection.mutable.Map[String, PreparedStatement]()
 
-  val isConnected: Boolean = connect("127.0.0.1")
+  var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
-  def connect(node: String): Boolean = {
-    cluster = Cluster.builder().addContactPoint(node).build()
-    val metadata = cluster.getMetadata()
-    var countHost: Int = 0
-    metadata.getAllHosts() map {
-      case host => countHost += 1
-    }
-    session = cluster.connect()
-
-    if (countHost < 1)
-      false
-    else {
-      init()
-      true
-    }
-  }
+  def lastError = _lastError
 
   def init() = {
+    _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Insert new block
-    var ps: PreparedStatement = session.prepare("INSERT INTO spacerock.uid_blocks (block_id, granted_server, status, ids) " +
+    var ps: PreparedStatement = sessionManager.prepare("INSERT INTO spacerock.uid_blocks (block_id, granted_server, status, ids) " +
       "VALUES (?, ?, ?, ?);")
-    pStatements.put("AddNewBlock", ps)
+    if (ps != null)
+      pStatements.put("AddNewBlock", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // assign a block to a server.
-    ps = session.prepare("UPDATE spacerock.uid_blocks SET granted_server = ?, status = ? WHERE block_id = ?;")
-    pStatements.put("AssignBlock", ps)
+    ps = sessionManager.prepare("UPDATE spacerock.uid_blocks SET granted_server = ?, status = ? WHERE block_id = ?;")
+    if (ps != null)
+      pStatements.put("AssignBlock", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // update status
-    ps = session.prepare("UPDATE spacerock.uid_blocks SET status = ? WHERE block_id = ?;")
-    pStatements.put("UpdateStatus", ps)
+    ps = sessionManager.prepare("UPDATE spacerock.uid_blocks SET status = ? WHERE block_id = ?;")
+    if (ps != null)
+      pStatements.put("UpdateStatus", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // get block
-    ps = session.prepare("SELECT ids from spacerock.uid_blocks WHERE block_id = ?;")
-    pStatements.put("GetBlockData", ps)
+    ps = sessionManager.prepare("SELECT ids from spacerock.uid_blocks WHERE block_id = ?;")
+    if (ps != null)
+      pStatements.put("GetBlockData", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // get all (un)managed  block ids
-    ps = session.prepare("SELECT block_id from spacerock.uid_blocks WHERE status = ? LIMIT 1;")
-    pStatements.put("GetBlockIdsWithStatus", ps)
+    ps = sessionManager.prepare("SELECT block_id from spacerock.uid_blocks WHERE status = ? LIMIT 1;")
+    if (ps != null)
+      pStatements.put("GetBlockIdsWithStatus", ps)
+    else
+      _lastError = sessionManager.lastError
 
-  }
-
-  override def close() = {
-    if (cluster != null)
-      cluster.close()
   }
 
   /**
@@ -83,7 +78,8 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
    */
   override def addNewBlock(blockId: Int, blocks: Set[String], status: Boolean, grantedServer: Int): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddNewBlock", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -93,12 +89,18 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
     bs.setBool("status", status)
     bs.setSet("ids", blocks)
 
-    val result: ResultSet = session.execute(bs)
-    val r: Row = result.one()
-    if (r != null) {
-      r.getBool(0)
-    } else {
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
       false
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val r: Row = result.one()
+      if (r != null) {
+        r.getBool(0)
+      } else {
+        false
+      }
     }
   }
 
@@ -110,16 +112,22 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
    */
   override def updateStatus(blockId: Int, status: Boolean): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateStatus", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setBool("status", status)
     bs.setInt("block_id", blockId)
-    session.execute(bs)
 
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -130,7 +138,8 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
    */
   override def assignBlockToServer(blockId: Int, serverId: Int): Set[String] = {
     var ps: PreparedStatement = pStatements.getOrElse("AssignBlock", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
@@ -138,21 +147,32 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
     bs.setInt("granted_server", serverId)
     bs.setBool("status", true)
     bs.setInt("block_id", blockId)
-    session.execute(bs)
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+    } else {
+      _lastError = sessionManager.lastError
+      return null
+    }
 
     // get data
     ps = pStatements.getOrElse("GetBlockData", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
       Logger.error("Cannot connect to database")
       return null
     }
     bs = new BoundStatement(ps)
     bs.setInt("block_id", blockId)
-    val result: ResultSet = session.execute(bs)
-    for (r: Row <- result.all()) {
-      return r.getSet("ids", classOf[String]).toSet
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      for (r: Row <- result.all()) {
+        return r.getSet("ids", classOf[String]).toSet
+      }
+      null
+    } else {
+      _lastError = sessionManager.lastError
+      null
     }
-      return null
   }
 
   /**
@@ -161,19 +181,26 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
    */
   override def getNextBlockId(): Int = {
     val ps: PreparedStatement = pStatements.getOrElse("GetBlockIdsWithStatus", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return -1
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setBool("status", false)
-    val result: ResultSet = session.execute(bs)
-    for (r: Row <- result.all()) {
-      if (r != null) {
-        return r.getInt("block_id")
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      for (r: Row <- result.all()) {
+        if (r != null) {
+          return r.getInt("block_id")
+        }
       }
+      -1
+    } else {
+      _lastError = sessionManager.lastError
+      -1
     }
-    -1
   }
 
   /**
@@ -183,7 +210,8 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
    */
   override def freeBlock(blockId: Int): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AssignBlock", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -191,8 +219,13 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
     bs.setInt("granted_server", -1)
     bs.setBool("status", false)
     bs.setInt("block_id", blockId)
-    session.execute(bs)
 
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 }

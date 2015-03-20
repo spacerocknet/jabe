@@ -4,6 +4,7 @@ import com.datastax.driver.core._
 import models.SubscriberModel
 import play.Logger
 import scaldi.{Injectable, Injector}
+import spacerock.constants.Constants
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -23,18 +24,18 @@ trait UserData {
   def addDeviceInfo(subscriber: SubscriberModel): Boolean
   def updateLastSeenField(uuid: String): Boolean
   def getAllUsers(): List[SubscriberModel]
-  def changeDevice(uid: String, platform: String, os: String, model: String, phone: String, deviceUuid: String): Boolean
-  def close(): Unit
+  def changeDevice(uid: String, platform: String, os: String, model: String,
+                   phone: String, deviceUuid: String): Boolean
+  def lastError: Int
 }
 
 class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
-  val clusterName = inject [String] (identified by "cassandra.cluster")
-  var cluster: Cluster = null
-  var session: Session = null
+  val sessionManager = inject [DbSessionManager]
   val pStatements: scala.collection.mutable.Map[String, PreparedStatement]
         = scala.collection.mutable.Map[String, PreparedStatement]()
+  var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
-  val isConnected: Boolean = connect("127.0.0.1")
+  def lastError = _lastError
 
   /**
    * Update last seen field on users table
@@ -43,15 +44,21 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
    */
   override def updateLastSeenField(uid: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateLastSeen", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("uid", uid)
     bs.setLong("last_seen", System.currentTimeMillis())
-    session.execute(bs)
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -72,7 +79,8 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
                                    email: String, fbId: String, locState: String, locRegion: String,
                                    locCountry: String, appName: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddUserInfo", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -90,8 +98,13 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     bs.setString("apps", appName)
     bs.setLong("last_seen", time)
     bs.setLong("registered_time", time)
-    session.execute(bs)
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -108,7 +121,8 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
   override def changeDevice(uid: String, platform: String, os: String, model: String,
                             phone: String, deviceUuid: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("ChangeDevice", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -122,8 +136,13 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     bs.setString("platform", platform)
     bs.setString("phone", phone)
     bs.setSet("device_list", set)
-    session.execute(bs)
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -139,7 +158,8 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
   override def addDeviceInfo(uid: String, platform: String, os: String, model: String,
                              phone: String, deviceUuid: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddDeviceInfo", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -155,8 +175,13 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     bs.setString("phone", phone)
     bs.setLong("registered_time", time)
     bs.setSet("device_list", set)
-    session.execute(bs)
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -176,23 +201,30 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
    */
   override def getInfoByUID(uid: String): SubscriberModel = {
     val ps: PreparedStatement = pStatements.get("GetUserInfoByUID").orNull(null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("uid", uid)
-    val result: ResultSet = session.execute(bs)
-    val row: Row = result.one()
-    if (row != null) {
-      val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
-        row.getString("os"), row.getString("model"),
-        row.getString("phone"),row.getString("device_uuid"), row.getString("email"),
-        row.getString("fb_id"), row.getString("state"),
-        row.getString("region"), row.getString("country"), row.getString("apps"))
-      subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
-      subscriber
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val row: Row = result.one()
+      if (row != null) {
+        val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
+          row.getString("os"), row.getString("model"),
+          row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
+          row.getString("fb_id"), row.getString("state"),
+          row.getString("region"), row.getString("country"), row.getString("apps"))
+        subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
+        subscriber
+      } else {
+        null
+      }
     } else {
+      _lastError = sessionManager.lastError
       null
     }
   }
@@ -204,23 +236,30 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
    */
   def getInfoByUsername(userName: String): SubscriberModel = {
     val ps: PreparedStatement = pStatements.getOrElse("GetUserInfoByUsername", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("user_name", userName)
-    val result: ResultSet = session.execute(bs)
-    val row: Row = result.one()
-    if (row != null) {
-      val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
-        row.getString("os"), row.getString("model"),
-        row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
-        row.getString("fb_id"), row.getString("state"),
-        row.getString("region"), row.getString("country"), row.getString("apps"))
-      subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
-      subscriber
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val row: Row = result.one()
+      if (row != null) {
+        val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
+          row.getString("os"), row.getString("model"),
+          row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
+          row.getString("fb_id"), row.getString("state"),
+          row.getString("region"), row.getString("country"), row.getString("apps"))
+        subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
+        subscriber
+      } else {
+        null
+      }
     } else {
+      _lastError = sessionManager.lastError
       null
     }
   }
@@ -231,81 +270,91 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
    */
   override def getAllUsers(): List[SubscriberModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetAllUsers", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
-    val result: ResultSet = session.execute(bs)
-    val l: scala.collection.mutable.ListBuffer[SubscriberModel] = scala.collection.mutable.ListBuffer()
-    for (row: Row <- result.all()) {
-      if (row != null) {
-        val sm: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
-          row.getString("os"), row.getString("model"),
-          row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
-          row.getString("fb_id"), row.getString("state"),
-          row.getString("region"), row.getString("country"), row.getString("apps"))
-        sm.deviceSet = row.getSet("device_list", classOf[String]).toSet
-        l.add(sm)
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val l: scala.collection.mutable.ListBuffer[SubscriberModel] = scala.collection.mutable.ListBuffer()
+      for (row: Row <- result.all()) {
+        if (row != null) {
+          val sm: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
+            row.getString("os"), row.getString("model"),
+            row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
+            row.getString("fb_id"), row.getString("state"),
+            row.getString("region"), row.getString("country"), row.getString("apps"))
+          sm.deviceSet = row.getSet("device_list", classOf[String]).toSet
+          l.add(sm)
+        }
       }
-    }
-    l.toList
-  }
-
-  def connect(node: String): Boolean = {
-    cluster = Cluster.builder().addContactPoint(node).build()
-    val metadata = cluster.getMetadata()
-    var countHost: Int = 0
-    metadata.getAllHosts() map {
-      case host => countHost += 1
-    }
-    session = cluster.connect()
-
-    if (countHost < 1)
-      false
-    else {
-      init()
-      true
+      l.toList
+    } else {
+      _lastError = sessionManager.lastError
+      null
     }
   }
 
   def init() = {
+    _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // update last seen
-    var ps: PreparedStatement = session.prepare("UPDATE spacerock.users SET last_seen = ? where uid = ?;")
-    pStatements.put("UpdateLastSeen", ps)
+    var ps: PreparedStatement = sessionManager.prepare("UPDATE spacerock.users SET last_seen = ? where uid = ?;")
+    if (ps != null)
+      pStatements.put("UpdateLastSeen", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // change user device
-    ps = session.prepare("UPDATE spacerock.users SET device_list = device_list + ?, device_uuid = ?, platform = ?, os = ?, " +
+    ps = sessionManager.prepare("UPDATE spacerock.users SET device_list = device_list + ?, device_uuid = ?, platform = ?, os = ?, " +
       "model = ?, phone = ? WHERE uid = ?;")
-    pStatements.put("ChangeDevice", ps)
+    if (ps != null)
+      pStatements.put("ChangeDevice", ps)
+    else
+    _lastError = sessionManager.lastError
 
     // Add user information
-    ps = session.prepare("UPDATE spacerock.users SET user_name = ?, first_name = ?, last_name = ?, " +
+    ps = sessionManager.prepare("UPDATE spacerock.users SET user_name = ?, first_name = ?, last_name = ?, " +
       "email = ?, fb_id = ?, state = ?, " +
       "region = ?, country = ?, apps = ?, registered_time = ?, last_seen = ? WHERE uid = ?;")
-    pStatements.put("AddUserInfo", ps)
+    if (ps != null)
+      pStatements.put("AddUserInfo", ps)
+    else
+    _lastError = sessionManager.lastError
 
     // add device information
-    ps = session.prepare("INSERT INTO spacerock.users (uid, device_uuid, platform, os, " +
+
+      ps = sessionManager.prepare("INSERT INTO spacerock.users (uid, device_uuid, platform, os, " +
       "model, phone, registered_time, device_list) " +
       "VALUES " +
       "(?, ?, ?, ?, ?, ?, ?, ?)")
-    pStatements.put("AddDeviceInfo", ps)
+    if (ps != null)
+      pStatements.put("AddDeviceInfo", ps)
+    else
+    _lastError = sessionManager.lastError
 
     // Get user info
-    ps = session.prepare("SELECT * from spacerock.users where uid = ?;")
-    pStatements.put("GetUserInfoByUID", ps)
-    ps = session.prepare("SELECT * from spacerock.users where user_name = ? ALLOW FILTERING;")
-    pStatements.put("GetUserInfoByUsername", ps)
+    ps = sessionManager.prepare("SELECT * from spacerock.users where uid = ?;")
+    if (ps != null)
+      pStatements.put("GetUserInfoByUID", ps)
+    else
+    _lastError = sessionManager.lastError
+
+    ps = sessionManager.prepare("SELECT * from spacerock.users where user_name = ? ALLOW FILTERING;")
+
+    if (ps != null)
+      pStatements.put("GetUserInfoByUsername", ps)
+    else
+    _lastError = sessionManager.lastError
 
     // Get all users
-    ps = session.prepare("SELECT * FROM spacerock.users ALLOW FILTERING;")
-    pStatements.put("GetAllUsers", ps)
-  }
 
-  override def close() = {
-    if (cluster != null)
-      cluster.close()
+    ps = sessionManager.prepare("SELECT * FROM spacerock.users ALLOW FILTERING;")
+    if (ps != null)
+      pStatements.put("GetAllUsers", ps)
+    else
+    _lastError = sessionManager.lastError
   }
 }
-

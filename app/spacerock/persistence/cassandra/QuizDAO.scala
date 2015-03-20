@@ -4,6 +4,7 @@ import com.datastax.driver.core._
 import models.QuAnModel
 import play.Logger
 import scaldi.{Injectable, Injector}
+import spacerock.constants.Constants
 
 import scala.collection.JavaConversions._
 /**
@@ -18,22 +19,23 @@ trait Quiz {
   def updateQuiz(qid: Long, category: String, question: String, correctAns: String,
                  ans1: String, ans2: String, ans3: String, df: Int): Boolean
   def getAllQuizzes(): List[QuAnModel]
-  def close(): Unit
+  def lastError: Int
 }
 
 class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
-  val clusterName = inject [String] (identified by "cassandra.cluster")
-  var cluster: Cluster = null
-  var session: Session = null
+  val sessionManager = inject [DbSessionManager]
   val pStatements: scala.collection.mutable.Map[String, PreparedStatement]
                 = scala.collection.mutable.Map[String, PreparedStatement]()
 
-  val isConnected: Boolean = connect("127.0.0.1")
+  var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
+
+  def lastError = _lastError
 
   override def updateQuiz(qid: Long, category: String, question: String, rightAnswer: String,
                            ans1: String, ans2: String, ans3: String, df: Int): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateQuiz", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -47,9 +49,13 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     bs.setString(6, ans3)
     bs.setLong(7, qid)
 
-    session.execute(bs)
-
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -67,7 +73,8 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
   override def addNewQuiz(qid: Long, category: String, question: String, rightAnswer: String,
                           ans1: String, ans2: String, ans3: String, df: Int): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddNewQuiz", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -81,8 +88,13 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     bs.setString(6, ans2)
     bs.setString(7, ans3)
 
-    session.execute(bs)
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -92,22 +104,29 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
    */
   override def getQuizByQid(qid: Long): QuAnModel = {
     val ps: PreparedStatement = pStatements.get("GetQuizByQid").getOrElse(null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setLong("qid", qid)
-    val result: ResultSet = session.execute(bs)
-    val row: Row = result.one()
-    if (row != null) {
-      val qa: QuAnModel = new QuAnModel(row.getLong("qid"), row.getString("category"), row.getString("question"),
-                              row.getString("right_answer"),
-                              row.getString("ans1"), row.getString("ans2"), row.getString("ans3"),
-                              row.getInt("df"))
-      qa
-    } else {
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
       null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val row: Row = result.one()
+      if (row != null) {
+        val qa: QuAnModel = new QuAnModel(row.getLong("qid"), row.getString("category"), row.getString("question"),
+          row.getString("right_answer"),
+          row.getString("ans1"), row.getString("ans2"), row.getString("ans3"),
+          row.getInt("df"))
+        qa
+      } else {
+        null
+      }
     }
   }
 
@@ -119,24 +138,31 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
    */
   override def getQuizzesByCategory(category: String, num: Int): List[QuAnModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetQuizzesByCategory", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString(0, category)
     bs.setInt(1, num)
-    val result: ResultSet = session.execute(bs)
-    val l: scala.collection.mutable.ListBuffer[QuAnModel] = scala.collection.mutable.ListBuffer()
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val l: scala.collection.mutable.ListBuffer[QuAnModel] = scala.collection.mutable.ListBuffer()
 
-    for (r: Row <- result.all()) {
-      if (r != null) {
-        l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
-          r.getString("right_answer"),
-          r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
+      for (r: Row <- result.all()) {
+        if (r != null) {
+          l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
+            r.getString("right_answer"),
+            r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
+        }
       }
+      l.toList
     }
-    l.toList
   }
 
   /**
@@ -145,66 +171,67 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
    */
   override def getAllQuizzes(): List[QuAnModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetAllQuizzes", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
-    val result: ResultSet = session.execute(bs)
-    val l: scala.collection.mutable.ListBuffer[QuAnModel] = scala.collection.mutable.ListBuffer()
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val l: scala.collection.mutable.ListBuffer[QuAnModel] = scala.collection.mutable.ListBuffer()
 
-    for (r: Row <- result.all()) {
-      if (r != null) {
-        l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
-          r.getString("right_answer"),
-          r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
+      for (r: Row <- result.all()) {
+        if (r != null) {
+          l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
+            r.getString("right_answer"),
+            r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
+        }
       }
-    }
-    l.toList
-  }
-
-  def connect(node: String): Boolean = {
-    cluster = Cluster.builder().addContactPoint(node).build()
-    val metadata = cluster.getMetadata()
-    var countHost: Int = 0
-    metadata.getAllHosts() map {
-      case host => countHost += 1
-    }
-    session = cluster.connect()
-
-    if (countHost < 1)
-      false
-    else {
-      init()
-      true
+      l.toList
     }
   }
 
   def init() = {
+    _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // update quiz
-    var ps: PreparedStatement = session.prepare("UPDATE spacerock.quizzes SET category = ?, " +
+    var ps: PreparedStatement = sessionManager.prepare("UPDATE spacerock.quizzes SET category = ?, " +
       "question = ?, right_answer = ?, df = ?, ans1 = ?, ans2 = ?, ans3 = ? where qid = ?;")
-    pStatements.put("UpdateQuiz", ps)
+    if (ps != null)
+      pStatements.put("UpdateQuiz", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Add new quiz
-    ps = session.prepare("INSERT INTO spacerock.quizzes (qid, category, question, right_answer, df, ans1, ans2, ans3) " +
+    ps = sessionManager.prepare("INSERT INTO spacerock.quizzes (qid, category, question, right_answer, df, ans1, ans2, ans3) " +
                         "VALUES (?, ?, ?, ?, ?, ?, ?, ?);")
-    pStatements.put("AddNewQuiz", ps)
+    if (ps != null)
+      pStatements.put("AddNewQuiz", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get quizzes info
-    ps = session.prepare("SELECT * from spacerock.quizzes where qid = ?;")
-    pStatements.put("GetQuizByQid", ps)
+    ps = sessionManager.prepare("SELECT * from spacerock.quizzes where qid = ?;")
+    if (ps != null)
+      pStatements.put("GetQuizByQid", ps)
+    else
+      _lastError = sessionManager.lastError
 
-    ps = session.prepare("SELECT * from spacerock.quizzes where category = ? LIMIT ? ALLOW FILTERING;")
-    pStatements.put("GetQuizzesByCategory", ps)
+    ps = sessionManager.prepare("SELECT * from spacerock.quizzes where category = ? LIMIT ? ALLOW FILTERING;")
+    if (ps != null)
+      pStatements.put("GetQuizzesByCategory", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get all quizzes
-    ps = session.prepare("SELECT * FROM spacerock.quizzes ALLOW FILTERING;")
-    pStatements.put("GetAllQuizzes", ps)
-  }
-
-  override def close() = {
-    if (cluster != null)
-      cluster.close()
+    ps = sessionManager.prepare("SELECT * FROM spacerock.quizzes ALLOW FILTERING;")
+    if (ps != null)
+      pStatements.put("GetAllQuizzes", ps)
+    else
+      _lastError = sessionManager.lastError
   }
 }

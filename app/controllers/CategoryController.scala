@@ -6,13 +6,11 @@ import play.api.libs.json._
 import play.api.mvc.{Controller, _}
 import scaldi.{Injectable, Injector}
 import spacerock.persistence.cassandra.Category
+import spacerock.utils.StaticVariables
 
 class CategoryController (implicit inj: Injector) extends Controller with Injectable {
   val category = inject[Category]
   implicit val catFmt = Json.format[CategoryModel]
-  val OK_STATUS = Json.obj("status" -> "OK")
-  val FAILED_STATUS = Json.obj("status" -> "Failed")
-  val REQUEST_BODY_ERROR_STATUS = Json.obj("status" -> "json body error")
   final val EMPTY_JSON: JsObject = Json.obj()
 
   /**
@@ -25,8 +23,8 @@ class CategoryController (implicit inj: Injector) extends Controller with Inject
     if (list != null) {
       Ok(Json.toJson(list))
     } else {
-      Logger.warn("Cannot get all category. Please check dabase again")
-      Ok(FAILED_STATUS)
+      Logger.warn("Cannot get all category. Please check database again")
+      Ok(StaticVariables.DbErrorStatus)
     }
   }
 
@@ -52,13 +50,13 @@ class CategoryController (implicit inj: Injector) extends Controller with Inject
           retObj = EMPTY_JSON
         }
       } else {
-        retObj = REQUEST_BODY_ERROR_STATUS
+        retObj = StaticVariables.InputErrorStatus
       }
       Ok(retObj)
     } catch {
       case e: Exception => {
         Logger.error("exception = %s" format e)
-        BadRequest("Invalid EAN")
+        Ok(StaticVariables.BackendErrorStatus)
       }
     }
   }
@@ -68,30 +66,31 @@ class CategoryController (implicit inj: Injector) extends Controller with Inject
    * @return Ok success status if success, or failed status, request body error otherwise
    */
   def updateCategory = Action { request =>
-    var retObj: JsObject = FAILED_STATUS
+    var retObj: JsObject = StaticVariables.OkStatus
     try {
       val json: Option[JsValue] = request.body.asJson
       val catName = (json.getOrElse(null) \ "category").asOpt[String].orNull(null)
-      val gameId: Int = (json.getOrElse(null) \ "game-id").asOpt[Int].getOrElse(-1)
+      val gameId: Int = (json.getOrElse(null) \ "game_id").asOpt[Int].getOrElse(-1)
       val description = (json.getOrElse(null) \ "description").asOpt[String].getOrElse("")
 
       if (category != null) {
         if (category.updateCategory(catName, gameId, description)) {
-          retObj = OK_STATUS
+          retObj = StaticVariables.OkStatus
         } else {
           Logger.warn("Cannot update category. %s" format json.toString)
+          retObj = StaticVariables.DbErrorStatus
         }
       } else {
-        retObj = REQUEST_BODY_ERROR_STATUS
+        retObj = StaticVariables.InputErrorStatus
         Logger.warn("Request body error. %s" format json.toString)
       }
-      Ok(retObj)
     } catch {
       case e: Exception => {
         Logger.error("exception e = %s" format e)
-        BadRequest("Invalid EAN")
+        retObj = StaticVariables.BackendErrorStatus
       }
     }
+    Ok(retObj)
   }
 
   /**
@@ -100,27 +99,30 @@ class CategoryController (implicit inj: Injector) extends Controller with Inject
    * @return Ok status if success, failed status, bad request if not
    */
   def addCategory = Action { request =>
-    var retObj: JsObject = FAILED_STATUS
+    var retObj: JsObject = StaticVariables.OkStatus
     try {
       val json: Option[JsValue] = request.body.asJson
       val catName = (json.getOrElse(null) \ "category").asOpt[String].orNull(null)
       val description = (json.getOrElse(null) \ "description").asOpt[String].getOrElse("")
 
       if (category != null) {
-        if (category.addNewCategory(catName, description))
-          retObj = OK_STATUS
-        else
+        if (category.addNewCategory(catName, description)) {
+          retObj = StaticVariables.OkStatus
+        } else {
           Logger.warn("Cannot add category to database. %s" format catName, description)
+          retObj = StaticVariables.DbErrorStatus
+        }
       } else {
-        retObj = REQUEST_BODY_ERROR_STATUS
+        retObj = StaticVariables.InputErrorStatus
         Logger.warn("Request body error. %s" format json.toString)
       }
-      Ok(retObj)
+
     } catch {
       case e: Exception => {
-        e.printStackTrace()
-        BadRequest("Invalid EAN")
+        Logger.error("exception e = %s" format e)
+        retObj = StaticVariables.BackendErrorStatus
       }
     }
+    Ok(retObj)
   }
 }

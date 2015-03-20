@@ -8,7 +8,7 @@ import play.api.libs.json.{JsObject, JsValue, Json}
 import play.api.mvc.{Action, Controller}
 import scaldi.{Injector, Injectable}
 import spacerock.persistence.cassandra._
-import spacerock.utils.IdGenerator
+import spacerock.utils.{StaticVariables, IdGenerator}
 
 /**
  * Created by william on 2/23/15.
@@ -16,8 +16,6 @@ import spacerock.utils.IdGenerator
 class BillingController(implicit inj: Injector) extends Controller with Injectable {
   val userDao = inject [UserData]
   val idGenerator = inject [IdGenerator]
-  val OkStatus = Json.obj("status" -> "OK")
-  val FailedStatus = Json.obj("status" -> "Failed")
   val uidBlock = inject [UidBlock]
   val idLocker = inject [CassandraLock]
   val billing = inject [Billing]
@@ -31,15 +29,15 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
    * @return Ok status if success, otherwise bad request, failed status, service unavailable
    */
   def addNewBill() = Action { request =>
-    var retObj: JsObject = FailedStatus
+    var retObj: JsObject = StaticVariables.OkStatus
     try {
       val json: Option[JsValue] = request.body.asJson
 
       val uid: String = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")
-      val gameId: Int = (json.getOrElse(null) \ "game-id").asOpt[Int].getOrElse(-1)
+      val gameId: Int = (json.getOrElse(null) \ "game_id").asOpt[Int].getOrElse(-1)
       val ts: Long = (json.getOrElse(null) \ "timestamp").asOpt[Long].getOrElse(System.currentTimeMillis())
-      val skuId: Int = (json.getOrElse(null) \ "sku-id").asOpt[Int].getOrElse(-1)
-      val nItems: Int = (json.getOrElse(null) \ "num-items").asOpt[Int].getOrElse(-1)
+      val skuId: Int = (json.getOrElse(null) \ "sku_id").asOpt[Int].getOrElse(-1)
+      val nItems: Int = (json.getOrElse(null) \ "num_items").asOpt[Int].getOrElse(-1)
       val totalDiscount: Float = (json.getOrElse(null) \ "discount").asOpt[Float].getOrElse(0.0f)
 
       if (uid.equals("") || gameId < 0 || skuId < 0 || nItems < 0) {
@@ -47,29 +45,32 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
       } else {
         // check sku
         val skuModel: SkuModel = sku.getSkuInfo(skuId)
-        if(skuModel != null) {
+        if(skuModel == null) {
           if (skuModel.expiredTime.getTime >= ts && skuModel.startTime.getTime <= ts) {
             // valid
             if (billing.addNewBill(uid, new Date(ts), gameId, skuId, nItems, totalDiscount)) {
-              retObj = OkStatus
+              retObj = StaticVariables.OkStatus
             } else {
               Logger.warn("Cannot add new billing record to database. Please check again. %s"
                           format json.toString)
+              retObj = StaticVariables.DbErrorStatus
             }
           } else {
             Logger.warn("Request to invalid sku. %s" format json.toString)
+            retObj = StaticVariables.WrongInputValueStatus
           }
         } else {
-          Logger.warn("Request to invalid sku. %s" format json.toString)
+          Logger.warn(" Request to invalid sku. %s" format json.toString)
+          retObj = StaticVariables.InputErrorStatus
         }
       }
-      Ok(retObj)
     } catch {
       case e:Exception => {
         Logger.error("exception = %s" format e)
-        ServiceUnavailable("Service is currently unavailable")
+        retObj = StaticVariables.BackendErrorStatus
       }
     }
+    Ok(retObj)
   }
 
   /**
@@ -99,7 +100,7 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
     } catch {
       case e: Exception => {
         Logger.error("exception = %s" format e)
-        ServiceUnavailable("Service is currently unavailable")
+        Ok(StaticVariables.BackendErrorStatus)
       }
     }
   }
@@ -114,7 +115,7 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
     try {
       val json: Option[JsValue] = request.body.asJson
       val uid: String = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")
-      val gameId: Int = (json.getOrElse(null) \ "game-id").asOpt[Int].getOrElse(-1)
+      val gameId: Int = (json.getOrElse(null) \ "game_id").asOpt[Int].getOrElse(-1)
       val from: Long = (json.getOrElse(null) \ "from").asOpt[Long].getOrElse(-1)
       val to: Long = (json.getOrElse(null) \ "to").asOpt[Long].getOrElse(-1)
 
@@ -133,7 +134,7 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
     } catch {
       case e: Exception => {
         Logger.error("exception = %s" format e)
-        ServiceUnavailable("Service is currently unavailable")
+        Ok(StaticVariables.BackendErrorStatus)
       }
     }
   }

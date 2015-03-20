@@ -6,7 +6,10 @@ import spacerock.persistence.cassandra._
 import spacerock.utils.{IdGenerator, UidGenerator}
 
 class UserModule extends Module {
+
   // persistence
+  bind [DbSessionManager] to new CassandraSessionManager
+
   bind [AuthCode] to new AuthCodeDAO
   bind [Billing] to new BillingDAO
   bind [CassandraLock] to new CassandraLockDAO

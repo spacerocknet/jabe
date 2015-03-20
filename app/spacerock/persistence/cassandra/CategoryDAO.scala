@@ -4,6 +4,7 @@ import com.datastax.driver.core._
 import models.CategoryModel
 import play.Logger
 import scaldi.{Injectable, Injector}
+import spacerock.constants.Constants
 
 import scala.collection.JavaConversions._
 import scala.collection.immutable.HashSet
@@ -20,17 +21,16 @@ trait Category {
   def addNewGames(category: String, gameIds: Set[Int]): Boolean
   def addNewGame(category: String, gameId: Int): Boolean
   def getAllCategories(): List[CategoryModel]
-  def close()
+  def lastError: Int
 }
 
 class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
-  val clusterName = inject [String] (identified by "cassandra.cluster")
-  var cluster: Cluster = null
-  var session: Session = null
+  val sessionManager = inject [DbSessionManager]
   val pStatements: scala.collection.mutable.Map[String, PreparedStatement]
-  = scala.collection.mutable.Map[String, PreparedStatement]()
+                = scala.collection.mutable.Map[String, PreparedStatement]()
+  var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
-  val isConnected: Boolean = connect("127.0.0.1")
+  def lastError = _lastError
 
   /**
    * Add new games to game list of category
@@ -40,7 +40,8 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
    */
   override def addNewGames(category: String, gameIds: Set[Int]): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddGameIdsToCategory", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -48,8 +49,13 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
     bs.setString("category", category)
     bs.setSet("game_list", gameIds)
 
-    session.execute(bs)
-    true
+    if (sessionManager.execute(bs) == null) {
+      _lastError = sessionManager.lastError
+      false
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    }
   }
 
   /**
@@ -72,7 +78,8 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
    */
   override def updateCategory(category: String, gameId: Int, description: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateCategory", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -83,8 +90,13 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
     bs.setSet(1, set)
     bs.setString(2, category)
 
-    session.execute(bs)
-    true
+    if (sessionManager.execute(bs) == null) {
+      _lastError = sessionManager.lastError
+      false
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    }
   }
 
   /**
@@ -97,7 +109,8 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
    */
   override def addNewCategory(category: String, description: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddNewCategory", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -105,8 +118,13 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
 
     bs.setString("category", category)
     bs.setString("description", description)
-    session.execute(bs)
-    true
+    if (sessionManager.execute(bs) == null) {
+      _lastError = sessionManager.lastError
+      false
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    }
   }
 
   /**
@@ -116,22 +134,28 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
    */
   override def getCategoryByName(category: String): CategoryModel = {
     val ps: PreparedStatement = pStatements.get("GetCategoryByName").getOrElse(null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString(0, category)
-    val result: ResultSet = session.execute(bs)
-
-    val row: Row = result.one()
-    if (row != null) {
-      val cat: CategoryModel = new CategoryModel(row.getString("category"),
-        row.getString("description"),
-        row.getSet( "game_list", classOf[Integer]).toList.map(i => i * 1))
-      cat
-    } else {
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
       null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val row: Row = result.one()
+      if (row != null) {
+        val cat: CategoryModel = new CategoryModel(row.getString("category"),
+          row.getString("description"),
+          row.getSet("game_list", classOf[Integer]).toList.map(i => i * 1))
+        cat
+      } else {
+        null
+      }
     }
   }
 
@@ -141,67 +165,67 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
    */
   override def getAllCategories(): List[CategoryModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetAllCategories", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
-    val result: ResultSet = session.execute(bs)
-    val l: scala.collection.mutable.ListBuffer[CategoryModel] = scala.collection.mutable.ListBuffer()
-    for (r: Row <- result.all()) {
-      if (r != null) {
-        l.add(new CategoryModel(r.getString("category"),
-          r.getString("description"),
-          r.getSet("game_list", classOf[Integer]).toList.map(ii => ii * 1)))
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      val l: scala.collection.mutable.ListBuffer[CategoryModel] = scala.collection.mutable.ListBuffer()
+      for (r: Row <- result.all()) {
+        if (r != null) {
+          l.add(new CategoryModel(r.getString("category"),
+            r.getString("description"),
+            r.getSet("game_list", classOf[Integer]).toList.map(ii => ii * 1)))
+        }
       }
-    }
-
-    l.toList
-  }
-
-
-  def connect(node: String): Boolean = {
-    cluster = Cluster.builder().addContactPoint(node).build()
-    val metadata = cluster.getMetadata()
-    var countHost: Int = 0
-    metadata.getAllHosts() map {
-      case host => countHost += 1
-    }
-    session = cluster.connect()
-
-    if (countHost < 1)
-      false
-    else {
-      init()
-      true
+      l.toList
     }
   }
+
 
   def init() = {
+    _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // update category
-    var ps: PreparedStatement = session.prepare("UPDATE spacerock.categories SET description = ?, " +
+    var ps: PreparedStatement = sessionManager.prepare("UPDATE spacerock.categories SET description = ?, " +
       "game_list = game_list + ? where category = ?;")
-    pStatements.put("UpdateCategory", ps)
+    if (ps != null)
+      pStatements.put("UpdateCategory", ps)
+    else
+      _lastError = sessionManager.lastError
 
-    ps = session.prepare("UPDATE spacerock.categories SET " +
+    ps = sessionManager.prepare("UPDATE spacerock.categories SET " +
       "game_list = game_list + ? where category = ?;")
-    pStatements.put("AddGameIdsToCategory", ps)
+    if (ps != null)
+      pStatements.put("AddGameIdsToCategory", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Add new category
-    ps = session.prepare("INSERT INTO spacerock.categories (category, description) VALUES (?, ?) IF NOT EXISTS;")
-    pStatements.put("AddNewCategory", ps)
+    ps = sessionManager.prepare("INSERT INTO spacerock.categories (category, description) VALUES (?, ?) IF NOT EXISTS;")
+    if (ps != null)
+      pStatements.put("AddNewCategory", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get category info
-    ps = session.prepare("SELECT * from spacerock.categories where category = ?;")
-    pStatements.put("GetCategoryByName", ps)
+    ps = sessionManager.prepare("SELECT * from spacerock.categories where category = ?;")
+    if (ps != null)
+      pStatements.put("GetCategoryByName", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get all category
-    ps = session.prepare("SELECT * FROM spacerock.categories ALLOW FILTERING;")
-    pStatements.put("GetAllCategories", ps)
+    ps = sessionManager.prepare("SELECT * FROM spacerock.categories ALLOW FILTERING;")
+    if (ps != null)
+      pStatements.put("GetAllCategories", ps)
+    else
+      _lastError = sessionManager.lastError
   }
 
-  override def close() = {
-    if (cluster != null)
-      cluster.close()
-  }
 }

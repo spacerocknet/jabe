@@ -4,9 +4,9 @@ import com.datastax.driver.core._
 import models.GameResultModel
 import play.Logger
 import scaldi.{Injectable, Injector}
+import spacerock.constants.Constants
 
 import scala.collection.JavaConversions._
-import scala.collection.immutable.HashMap
 import scala.collection.mutable.ListBuffer
 
 /**
@@ -19,17 +19,18 @@ trait GameResult {
   def getResultsByUid(uid: String): List[GameResultModel]
   def getResultsByUidOfGame(uid: String, gameId: Int): Map[Int, Long]
   def getResultsByGameLevel(gameId: Int, level: Int): Map[String, Long]
-  def close(): Unit
+
+  def lastError: Int
 }
 
 class GameResultDAO (implicit inj: Injector) extends GameResult with Injectable {
-  val clusterName = inject [String] (identified by "cassandra.cluster")
-  var cluster: Cluster = null
-  var session: Session = null
+  val sessionManager = inject [DbSessionManager]
   val pStatements: scala.collection.mutable.Map[String, PreparedStatement]
-  = scala.collection.mutable.Map[String, PreparedStatement]()
+                  = scala.collection.mutable.Map[String, PreparedStatement]()
 
-  val isConnected: Boolean = connect("127.0.0.1")
+  var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
+
+  def lastError = _lastError
 
   /**
    * Add new results from what user played
@@ -41,7 +42,8 @@ class GameResultDAO (implicit inj: Injector) extends GameResult with Injectable 
    */
   override def addResults(uid: String, gid: Int, level: Int, score: Long): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddResults", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -50,8 +52,14 @@ class GameResultDAO (implicit inj: Injector) extends GameResult with Injectable 
     bs.setInt("game_id", gid)
     bs.setInt("level", level)
     bs.setLong("score", score)
-    session.execute(bs)
-    true
+
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -70,23 +78,30 @@ class GameResultDAO (implicit inj: Injector) extends GameResult with Injectable 
    */
   def getResultsByUid(uid: String): List[GameResultModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetResultsByUid", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString(0, uid)
-    val result: ResultSet = session.execute(bs)
-    val l: ListBuffer[GameResultModel] = new ListBuffer[GameResultModel]
-    for (row <- result.all()) {
-      if (row != null) {
-        l.add(new GameResultModel(row.getInt("game_id"),
-        row.getInt("level"),
-        row.getLong("score"),
-        uid))
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val l: ListBuffer[GameResultModel] = new ListBuffer[GameResultModel]
+      for (row <- result.all()) {
+        if (row != null) {
+          l.add(new GameResultModel(row.getInt("game_id"),
+            row.getInt("level"),
+            row.getLong("score"),
+            uid))
+        }
       }
+      l.toList
     }
-    l.toList
   }
 
   /**
@@ -97,22 +112,30 @@ class GameResultDAO (implicit inj: Injector) extends GameResult with Injectable 
    */
   override def getResultsByGameLevel(gameId: Int, level: Int): Map[String, Long] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetResultByGameLevel", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
-    val map: scala.collection.mutable.HashMap[String, Long] = new scala.collection.mutable.HashMap[String, Long]
+
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setInt("game_id", gameId)
     bs.setInt("level", level)
 
-    val result: ResultSet = session.execute(bs)
-    for (row: Row <- result.all()) {
-      if (row != null) {
-        map.put(row.getString("uid"), row.getLong("score"))
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val map: scala.collection.mutable.HashMap[String, Long] = new scala.collection.mutable.HashMap[String, Long]
+      for (row: Row <- result.all()) {
+        if (row != null) {
+          map.put(row.getString("uid"), row.getLong("score"))
+        }
       }
+      map.toMap
     }
-    map.toMap
   }
 
   /**
@@ -123,7 +146,8 @@ class GameResultDAO (implicit inj: Injector) extends GameResult with Injectable 
    */
   override def getResultsByUidOfGame(uid: String, gameId: Int): Map[Int, Long] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetResultByUidGame", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
@@ -132,57 +156,51 @@ class GameResultDAO (implicit inj: Injector) extends GameResult with Injectable 
     bs.setInt("game_id", gameId)
     bs.setString("uid", uid)
 
-    val result: ResultSet = session.execute(bs)
-    for (row: Row <- result.all()) {
-      if (row != null) {
-        map.put(row.getInt("level"), row.getLong("score"))
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      for (row: Row <- result.all()) {
+        if (row != null) {
+          map.put(row.getInt("level"), row.getLong("score"))
+        }
       }
-    }
-    map.toMap
-  }
-
-  def connect(node: String): Boolean = {
-    cluster = Cluster.builder().addContactPoint(node).build()
-    val metadata = cluster.getMetadata()
-    var countHost: Int = 0
-    metadata.getAllHosts() map {
-      case host => countHost += 1
-    }
-    session = cluster.connect()
-
-    if (countHost < 1)
-      false
-    else {
-      init()
-      true
+      map.toMap
     }
   }
-
 
   def init() = {
+    _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Add Game result
-    var ps: PreparedStatement = session.prepare("UPDATE spacerock.game_result SET score = ? " +
+    var ps: PreparedStatement = sessionManager.prepare("UPDATE spacerock.game_result SET score = ? " +
       "WHERE game_id = ? AND level = ? and uid = ?;")
-    pStatements.put("AddResults", ps)
+    if (ps != null)
+      pStatements.put("AddResults", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get game result by uid
-    ps = session.prepare("SELECT * from spacerock.game_result where uid = ?;")
-    pStatements.put("GetResultsByUid", ps)
+    ps = sessionManager.prepare("SELECT * from spacerock.game_result where uid = ?;")
+    if (ps != null)
+      pStatements.put("GetResultsByUid", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get game result by game id and level;
-    ps = session.prepare("SELECT score, uid from spacerock.game_result where game_id = ? and level = ?;")
-    pStatements.put("GetResultByGameLevel", ps)
+    ps = sessionManager.prepare("SELECT score, uid from spacerock.game_result where game_id = ? and level = ?;")
+    if (ps != null)
+      pStatements.put("GetResultByGameLevel", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get game result by user id and game id;
-    ps = session.prepare("SELECT score, level from spacerock.game_result where game_id = ? and uid = ?;")
-    pStatements.put("GetResultByUidGame", ps)
+    ps = sessionManager.prepare("SELECT score, level from spacerock.game_result where game_id = ? and uid = ?;")
+    if (ps != null)
+      pStatements.put("GetResultByUidGame", ps)
+    else
+      _lastError = sessionManager.lastError
 
   }
-
-  override def close() = {
-    if (cluster != null)
-      cluster.close()
-  }
-
-
 }

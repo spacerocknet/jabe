@@ -5,6 +5,8 @@ import models.{DeviceModel}
 import play.Logger
 import scaldi.{Injector, Injectable}
 import java.util.Date
+import spacerock.constants.Constants
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 
@@ -19,59 +21,50 @@ trait Device {
   def getInfoByDuuid(dUuid: String): DeviceModel
   def getInfoByPhone(phone: String): List[DeviceModel]
   def getInfoByUid(uid: String): List[DeviceModel]
-  def close(): Unit
+  def lastError: Int
 }
 
 class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
-  val clusterName = inject [String] (identified by "cassandra.cluster")
-  var cluster: Cluster = null
-  var session: Session = null
+  val sessionManager = inject [DbSessionManager]
   val pStatements: scala.collection.mutable.Map[String, PreparedStatement]
-  = scala.collection.mutable.Map[String, PreparedStatement]()
+                 = scala.collection.mutable.Map[String, PreparedStatement]()
+  var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
-  val isConnected: Boolean = connect("127.0.0.1")
-
-  def connect(node: String): Boolean = {
-    cluster = Cluster.builder().addContactPoint(node).build()
-    val metadata = cluster.getMetadata()
-    var countHost: Int = 0
-    metadata.getAllHosts() map {
-      case host => countHost += 1
-    }
-    session = cluster.connect()
-
-    if (countHost < 1)
-      false
-    else {
-      init()
-      true
-    }
-  }
+  def lastError = _lastError
 
   def init() = {
+    _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Insert new bill
-    var ps: PreparedStatement = session.prepare("INSERT INTO spacerock.device (" +
+    var ps: PreparedStatement = sessionManager.prepare("INSERT INTO spacerock.device (" +
       "duuid, uid, os, platform, model, phone, registered_time) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?);")
-    pStatements.put("AddNewDevice", ps)
+    if (ps != null)
+      pStatements.put("AddNewDevice", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get device's info
-    ps = session.prepare("SELECT * FROM spacerock.device WHERE duuid = ?;")
-    pStatements.put("GetInfoByDUuid", ps)
+    ps = sessionManager.prepare("SELECT * FROM spacerock.device WHERE duuid = ?;")
+    if (ps != null)
+      pStatements.put("GetInfoByDUuid", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // get devices by phone
-    ps = session.prepare("SELECT * FROM spacerock.device WHERE phone = ?;")
-    pStatements.put("GetInfoByPhone", ps)
+    ps = sessionManager.prepare("SELECT * FROM spacerock.device WHERE phone = ?;")
+    if (ps != null)
+      pStatements.put("GetInfoByPhone", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // get devices by phone
-    ps = session.prepare("SELECT * FROM spacerock.device WHERE uid = ?;")
-    pStatements.put("GetInfoByUid", ps)
+    ps = sessionManager.prepare("SELECT * FROM spacerock.device WHERE uid = ?;")
+    if (ps != null)
+      pStatements.put("GetInfoByUid", ps)
+    else
+      _lastError = sessionManager.lastError
   }
 
-  override def close() = {
-    if (cluster != null)
-      cluster.close()
-  }
 
   /**
    * Add new device info to system.
@@ -87,7 +80,8 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
   override def addNewDevice(dUuid: String, rt: Date, uid: String, os: String, platform: String,
                             model: String, phone: String): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddNewDevice", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -100,9 +94,13 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
     bs.setString("phone", phone)
     bs.setDate("registered_time", rt)
 
-    session.execute(bs)
-
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -112,27 +110,34 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
    */
   override def getInfoByPhone(phone: String): List[DeviceModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetInfoByPhone", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("phone", phone)
-    val result: ResultSet = session.execute(bs)
-    val l: ListBuffer[DeviceModel] = new ListBuffer[DeviceModel]
-    for (r: Row <- result.all()) {
-      if (r != null) {
-        val dm: DeviceModel = new DeviceModel(r.getString("duuid"),
-          r.getDate("registered_time"),
-          r.getString("uid"),
-          r.getString("os"),
-          r.getString("platform"),
-          r.getString("model"),
-          r.getString("phone"))
-        l.add(dm)
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val l: ListBuffer[DeviceModel] = new ListBuffer[DeviceModel]
+      for (r: Row <- result.all()) {
+        if (r != null) {
+          val dm: DeviceModel = new DeviceModel(r.getString("duuid"),
+            r.getDate("registered_time"),
+            r.getString("uid"),
+            r.getString("os"),
+            r.getString("platform"),
+            r.getString("model"),
+            r.getString("phone"))
+          l.add(dm)
+        }
       }
+      l.toList
     }
-    l.toList
   }
 
   /**
@@ -142,27 +147,33 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
    */
   override def getInfoByDuuid(dUuid: String): DeviceModel = {
     val ps: PreparedStatement = pStatements.getOrElse("GetInfoByDUuid", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("duuid", dUuid)
-    val result: ResultSet = session.execute(bs)
-    val l: ListBuffer[DeviceModel] = new ListBuffer[DeviceModel]
-    for (r: Row <- result.all()) {
-      if (r != null) {
-        val dm: DeviceModel = new DeviceModel(r.getString("duuid"),
-          r.getDate("registered_time"),
-          r.getString("uid"),
-          r.getString("os"),
-          r.getString("platform"),
-          r.getString("model"),
-          r.getString("phone"))
-        return dm
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      for (r: Row <- result.all()) {
+        if (r != null) {
+          val dm: DeviceModel = new DeviceModel(r.getString("duuid"),
+            r.getDate("registered_time"),
+            r.getString("uid"),
+            r.getString("os"),
+            r.getString("platform"),
+            r.getString("model"),
+            r.getString("phone"))
+          return dm
+        }
       }
+      null
     }
-    null
   }
 
   /**
@@ -181,26 +192,33 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
    */
   override def getInfoByUid(uid: String): List[DeviceModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetInfoByUid", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("uid", uid)
-    val result: ResultSet = session.execute(bs)
-    val l: ListBuffer[DeviceModel] = new ListBuffer[DeviceModel]
-    for (r: Row <- result.all()) {
-      if (r != null) {
-        val dm: DeviceModel = new DeviceModel(r.getString("duuid"),
-          r.getDate("registered_time"),
-          r.getString("uid"),
-          r.getString("os"),
-          r.getString("platform"),
-          r.getString("model"),
-          r.getString("phone"))
-        l.add(dm)
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val l: ListBuffer[DeviceModel] = new ListBuffer[DeviceModel]
+      for (r: Row <- result.all()) {
+        if (r != null) {
+          val dm: DeviceModel = new DeviceModel(r.getString("duuid"),
+            r.getDate("registered_time"),
+            r.getString("uid"),
+            r.getString("os"),
+            r.getString("platform"),
+            r.getString("model"),
+            r.getString("phone"))
+          l.add(dm)
+        }
       }
+      l.toList
     }
-    l.toList
   }
 }

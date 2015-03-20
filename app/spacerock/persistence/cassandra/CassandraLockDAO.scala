@@ -3,8 +3,7 @@ package spacerock.persistence.cassandra
 import com.datastax.driver.core._
 import play.Logger
 import scaldi.{Injectable, Injector}
-
-import scala.collection.JavaConversions._
+import spacerock.constants.Constants
 
 /**
  * Created by william on 2/24/15.
@@ -14,58 +13,46 @@ trait CassandraLock {
 //  def lock(key: String): Boolean
   def tryLock(key: String): Boolean
   def unlock(key: String): Boolean
-  def close(): Unit
+  def lastError: Int
 }
 
 class CassandraLockDAO (implicit inj: Injector) extends CassandraLock with Injectable {
-  val clusterName = inject [String] (identified by "cassandra.cluster")
-  var cluster: Cluster = null
-  var session: Session = null
+  val sessionManager = inject [DbSessionManager]
   val pStatements: scala.collection.mutable.Map[String, PreparedStatement]
-  = scala.collection.mutable.Map[String, PreparedStatement]()
+                  = scala.collection.mutable.Map[String, PreparedStatement]()
+  var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
-  val isConnected: Boolean = connect("127.0.0.1")
-
-  def connect(node: String): Boolean = {
-    cluster = Cluster.builder().addContactPoint(node).build()
-    val metadata = cluster.getMetadata()
-    var countHost: Int = 0
-    metadata.getAllHosts() map {
-      case host => countHost += 1
-    }
-    session = cluster.connect()
-
-    if (countHost < 1)
-      false
-    else {
-      init()
-      true
-    }
-  }
+  def lastError = _lastError
 
   def init() = {
+    _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Lock
-    var ps: PreparedStatement = session.prepare("UPDATE spacerock.lock SET do_lock = ? WHERE lock_name = ? if do_lock = ?;")
-    pStatements.put("Lock", ps)
+    var ps: PreparedStatement = sessionManager.prepare("UPDATE spacerock.lock SET do_lock = ? WHERE lock_name = ? if do_lock = ?;")
+    if (ps != null)
+      pStatements.put("Lock", ps)
+    else
+      _lastError = sessionManager.lastError
 
-    ps = session.prepare("INSERT INTO spacerock.lock (lock_name, do_lock) " +
+    ps = sessionManager.prepare("INSERT INTO spacerock.lock (lock_name, do_lock) " +
       "VALUES (?, ?) IF NOT EXISTS;")
-    pStatements.put("InsertLock", ps)
+    if (ps != null)
+      pStatements.put("InsertLock", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // unlock
-    ps = session.prepare("UPDATE spacerock.lock SET do_lock = ? WHERE lock_name = ?;")
-    pStatements.put("Unlock", ps)
+    ps = sessionManager.prepare("UPDATE spacerock.lock SET do_lock = ? WHERE lock_name = ?;")
+    if (ps != null)
+      pStatements.put("Unlock", ps)
+    else
+      _lastError = sessionManager.lastError
 
-  }
-
-  override def close() = {
-    if (cluster != null)
-      cluster.close()
   }
 
   override def tryLock(key: String): Boolean = {
     val ps: PreparedStatement = pStatements.get("Lock").getOrElse(null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -73,48 +60,61 @@ class CassandraLockDAO (implicit inj: Injector) extends CassandraLock with Injec
     bs.setBool(0, true)
     bs.setString("lock_name", key)
     bs.setBool(2, false)
-    var result: ResultSet = session.execute(bs)
-    var row: Row = result.one()
-    if (row != null) {
-      if (!row.getBool(0)) {
-        // if lock is not exists, try to insert new record
-        val ps2: PreparedStatement = pStatements.get("InsertLock").getOrElse(null)
-        if (ps2 == null || !isConnected) {
-          Logger.error("Cannot connect to database")
-          return false
+    var result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      false
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      var row: Row = result.one()
+      if (row != null) {
+        if (!row.getBool(0)) {
+          // if lock is not exists, try to insert new record
+          val ps2: PreparedStatement = pStatements.get("InsertLock").getOrElse(null)
+          if (ps2 == null || !sessionManager.connected) {
+            Logger.error("Cannot connect to database")
+            return false
+          }
+          val bs2: BoundStatement = new BoundStatement(ps2)
+          bs2.setString("lock_name", key)
+          bs2.setBool("do_lock", false)
+          sessionManager.execute(bs2)
+          // try to lock again
+          result = sessionManager.execute(bs)
+          row = result.one()
+          if (row != null) {
+            return row.getBool(0)
+          }
+        } else {
+          return true
         }
-        val bs2: BoundStatement = new BoundStatement(ps2)
-        bs2.setString("lock_name", key)
-        bs2.setBool("do_lock", false)
-        session.execute(bs2)
-        // try to lock again
-        result = session.execute(bs)
-        row = result.one()
-        if (row != null) {
-          return row.getBool(0)
-        }
-      } else {
-        return true
       }
+      false
     }
-    false
   }
 
   override def unlock(key: String): Boolean = {
     val ps: PreparedStatement = pStatements.get("Unlock").getOrElse(null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setBool("do_lock", false)
     bs.setString("lock_name", key)
-    val result: ResultSet = session.execute(bs)
-    val row: Row = result.one()
-    if (row != null) {
-      row.getBool(0)
-    } else {
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
       false
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val row: Row = result.one()
+      if (row != null) {
+        row.getBool(0)
+      } else {
+        false
+      }
     }
   }
 }

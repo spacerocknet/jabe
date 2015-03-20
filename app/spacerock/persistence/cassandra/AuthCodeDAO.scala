@@ -1,11 +1,13 @@
 package spacerock.persistence.cassandra
 
+import java.util.Date
+
 import com.datastax.driver.core._
+import com.datastax.driver.core.exceptions.NoHostAvailableException
 import models.TokenInfo
 import play.Logger
-import scaldi.{Injector, Injectable}
-import scala.collection.JavaConversions._
-import java.util.Date
+import scaldi.{Injectable, Injector}
+import spacerock.constants.Constants
 
 /**
  * Created by william on 3/3/15.
@@ -16,63 +18,56 @@ trait AuthCode{
   def updateStatus(code: String, status: Boolean): Boolean
   def updateCreatedTime(code: String, createdTime: Date): Boolean
   def updateExpiredTime(code: String, expiredTime: Date): Boolean
-  def close(): Unit
+  def lastError: Int
 }
 
 class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
-  val clusterName = inject [String] (identified by "cassandra.cluster")
-  var cluster: Cluster = null
-  var session: Session = null
+  val sessionManager = inject [DbSessionManager]
   val pStatements: scala.collection.mutable.Map[String, PreparedStatement]
                   = scala.collection.mutable.Map[String, PreparedStatement]()
+  var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
-  val isConnected: Boolean = connect("127.0.0.1")
-
-  def connect(node: String): Boolean = {
-    cluster = Cluster.builder().addContactPoint(node).build()
-    val metadata = cluster.getMetadata()
-    var countHost: Int = 0
-    metadata.getAllHosts() map {
-      case host => countHost += 1
-    }
-    session = cluster.connect()
-
-    if (countHost < 1)
-      false
-    else {
-      init()
-      true
-    }
-  }
+  def lastError = _lastError
 
   def init() = {
+    _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Insert new auth code
-    var ps: PreparedStatement = session.prepare("INSERT INTO spacerock.authcode " +
+    var ps: PreparedStatement = sessionManager.prepare("INSERT INTO spacerock.authcode " +
                                 "(code, created_time, expired_time, status) " +
                                 "VALUES (?, ?, ?, ?) IF NOT EXISTS;")
-    pStatements.put("AddNewCode", ps)
+    if (ps != null)
+      pStatements.put("AddNewCode", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get auth code info
-    ps = session.prepare("SELECT created_time, expired_time, status FROM spacerock.authcode WHERE code = ?;")
-    pStatements.put("GetAuthCode", ps)
+    ps = sessionManager.prepare("SELECT created_time, expired_time, status FROM spacerock.authcode WHERE code = ?;")
+    if (ps != null)
+      pStatements.put("GetAuthCode", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Update status
-    ps = session.prepare("INSERT INTO spacerock.authcode (code, status) VALUES (?, ?);")
-    pStatements.put("UpdateStatus", ps)
+    ps = sessionManager.prepare("INSERT INTO spacerock.authcode (code, status) VALUES (?, ?);")
+    if (ps != null)
+      pStatements.put("UpdateStatus", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Update created time
-    ps = session.prepare("INSERT INTO spacerock.authcode (code, created_time) VALUES (?, ?);")
-    pStatements.put("UpdateCreatedTime", ps)
+    ps = sessionManager.prepare("INSERT INTO spacerock.authcode (code, created_time) VALUES (?, ?);")
+    if (ps != null)
+      pStatements.put("UpdateCreatedTime", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Update status
-    ps = session.prepare("INSERT INTO spacerock.authcode (code, expired_time) VALUES (?, ?);")
-    pStatements.put("UpdateExpiredTime", ps)
+    ps = sessionManager.prepare("INSERT INTO spacerock.authcode (code, expired_time) VALUES (?, ?);")
 
-  }
-
-  override def close(): Unit = {
-    if (cluster != null)
-      cluster.close()
+    if (ps != null)
+      pStatements.put("UpdateExpiredTime", ps)
+    else
+      _lastError = sessionManager.lastError
   }
 
   /**
@@ -86,7 +81,8 @@ class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
    */
   override def addNewCode(code: String, createdTime: Date, expiredTime: Date, status: Boolean, ttl: Long): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddNewCode", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -96,9 +92,13 @@ class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
     bs.setDate("expired_time", expiredTime)
     bs.setBool("status", status)
 
-    session.execute(bs)
-
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+     false
+    }
   }
 
   /**
@@ -108,19 +108,26 @@ class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
    */
   override def getAuthCode(code: String): TokenInfo = {
     val ps: PreparedStatement = pStatements.getOrElse("GetAuthCode", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("code", code)
-    val res: ResultSet = session.execute(bs)
-    val row: Row = res.one()
-    if (row != null) {
-      return new TokenInfo(code, row.getDate("created_time"), row.getDate("expired_time"), row.getBool("status"))
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val row: Row = result.one()
+      if (row != null) {
+        return new TokenInfo(code, row.getDate("created_time"), row.getDate("expired_time"), row.getBool("status"))
+      }
+      Logger.warn("Cannot find token in db")
+      null
     }
-    Logger.warn("Cannot find token in db")
-    null
   }
 
   /**
@@ -131,19 +138,28 @@ class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
    */
   override def updateStatus(code: String, status: Boolean): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateStatus", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("code", code)
     bs.setBool("status", status)
-    val r: ResultSet = session.execute(bs)
-    val row: Row = r.one()
-    if (row != null && row.getBool(0))
-      return true
-    else
-      return false
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val row: Row = result.one()
+      if (row != null) {
+        row.getBool(0)
+      } else {
+        _lastError = sessionManager.lastError
+        false
+      }
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -154,19 +170,28 @@ class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
    */
   override def updateCreatedTime(code: String, createdTime: Date): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateCreatedTime", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("code", code)
     bs.setDate("created_time", createdTime)
-    val r: ResultSet = session.execute(bs)
-    val row: Row = r.one()
-    if (row != null && row.getBool(0))
-      return true
-    else
-      return false
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val row: Row = result.one()
+      if (row != null) {
+        row.getBool(0)
+      } else {
+        _lastError = sessionManager.lastError
+        false
+      }
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   /**
@@ -177,18 +202,27 @@ class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
    */
   override def updateExpiredTime(code: String, expiredTime: Date): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateExpiredTime", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("code", code)
     bs.setDate("expired_time", expiredTime)
-    val r: ResultSet = session.execute(bs)
-    val row: Row = r.one()
-    if (row != null && row.getBool(0))
-      return true
-    else
-      return false
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val row: Row = result.one()
+      if (row != null) {
+        row.getBool(0)
+      } else {
+        _lastError = sessionManager.lastError
+        false
+      }
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 }

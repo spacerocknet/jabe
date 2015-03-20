@@ -6,6 +6,7 @@ import com.datastax.driver.core._
 import models.BillingRecordModel
 import play.Logger
 import scaldi.{Injector, Injectable}
+import spacerock.constants.Constants
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ListBuffer
 
@@ -20,69 +21,61 @@ trait Billing {
   def getAllBillsOfUserWithDate(uid: String, from: Date, to: Date): List[BillingRecordModel]
   def getBillsOfUserFromGame(uid: String, gameId: Int): List[BillingRecordModel]
   def getBillsOfUserFromGameWithDate(uid: String, gameId: Int, from: Date, to: Date): List[BillingRecordModel]
-  def close(): Unit
+  def lastError: Int
 }
 
 class BillingDAO (implicit inj: Injector) extends Billing with Injectable {
-  val clusterName = inject [String] (identified by "cassandra.cluster")
-  var cluster: Cluster = null
-  var session: Session = null
+  val sessionManager = inject [DbSessionManager]
   val pStatements: scala.collection.mutable.Map[String, PreparedStatement]
-  = scala.collection.mutable.Map[String, PreparedStatement]()
+            = scala.collection.mutable.Map[String, PreparedStatement]()
+  var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
-  val isConnected: Boolean = connect("127.0.0.1")
-
-  def BillingDAO() = {}
-
-  def connect(node: String): Boolean = {
-    cluster = Cluster.builder().addContactPoint(node).build()
-    val metadata = cluster.getMetadata()
-    var countHost: Int = 0
-    metadata.getAllHosts() map {
-      case host => countHost += 1
-    }
-    session = cluster.connect()
-
-    if (countHost < 1)
-      false
-    else {
-      init()
-      true
-    }
-  }
+  def lastError = _lastError
 
   def init() = {
+    _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Insert new bill
-    var ps: PreparedStatement = session.prepare("INSERT INTO spacerock.billing (uid, ts, game_id, sku_id, " +
+    var ps: PreparedStatement = sessionManager.prepare("INSERT INTO spacerock.billing (uid, ts, game_id, sku_id, " +
       "n_items, discount) " +
       "VALUES (?, ?, ?, ?, ?, ?);")
-    pStatements.put("AddNewBill", ps)
+    if (ps != null)
+      pStatements.put("AddNewBill", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get all billing record of a user
-    ps = session.prepare("SELECT * FROM spacerock.billing WHERE uid = ?;")
-    pStatements.put("GetBills", ps)
+    ps = sessionManager.prepare("SELECT * FROM spacerock.billing WHERE uid = ?;")
+    if (ps != null)
+      pStatements.put("GetBills", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // Get all billing record of a user in a rage of date
-    ps = session.prepare("SELECT * FROM spacerock.billing WHERE uid = ? AND ts > ? and ts < ?;")
-    pStatements.put("GetBillsWithBoundDate", ps)
+    ps = sessionManager.prepare("SELECT * FROM spacerock.billing WHERE uid = ? AND ts > ? and ts < ?;")
+    if (ps != null)
+      pStatements.put("GetBillsWithBoundDate", ps)
+    else
+    _lastError = sessionManager.lastError
 
     // get all billing records of a user in a game
-    ps = session.prepare("SELECT * FROM spacerock.billing WHERE uid = ? AND game_id = ?;")
-    pStatements.put("GetBillsFromGame", ps)
+    ps = sessionManager.prepare("SELECT * FROM spacerock.billing WHERE uid = ? AND game_id = ?;")
+    if (ps != null)
+      pStatements.put("GetBillsFromGame", ps)
+    else
+      _lastError = sessionManager.lastError
 
     // get all billing records of a user in a game
-    ps = session.prepare("SELECT * FROM spacerock.billing WHERE uid = ? AND game_id = ? and ts < ? and ts > ?;")
-    pStatements.put("GetBillsFromGameWithDate", ps)
-  }
-
-  override def close(): Unit = {
-    if (cluster != null)
-      cluster.close()
+    ps = sessionManager.prepare("SELECT * FROM spacerock.billing WHERE uid = ? AND game_id = ? and ts < ? and ts > ?;")
+    if (ps != null)
+      pStatements.put("GetBillsFromGameWithDate", ps)
+    else
+      _lastError = sessionManager.lastError
   }
 
   override def addNewBill(uid: String, ts: Date, gameId: Int, skuId: Int, nItems: Int, discount: Float): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("AddNewBill", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return false
     }
@@ -94,9 +87,13 @@ class BillingDAO (implicit inj: Injector) extends Billing with Injectable {
     bs.setInt("n_items", nItems)
     bs.setFloat("discount", discount)
 
-    session.execute(bs)
-
-    true
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
   }
 
   override def addNewBill(br: BillingRecordModel): Boolean = {
@@ -105,32 +102,39 @@ class BillingDAO (implicit inj: Injector) extends Billing with Injectable {
 
   override def getAllBillsOfUser(uid: String): List[BillingRecordModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetBills", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("uid", uid)
-    val result: ResultSet = session.execute(bs)
-
-    val l: ListBuffer[BillingRecordModel] = new ListBuffer[BillingRecordModel]
-    for (r: Row <- result.all()) {
-      if (r != null) {
-        val sku: BillingRecordModel = new BillingRecordModel(r.getString("uid"),
-          r.getDate("ts"),
-          r.getInt("game_id"),
-          r.getInt("sku_id"),
-          r.getInt("n_items"),
-          r.getFloat("discount"))
-        l.add(sku)
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val l: ListBuffer[BillingRecordModel] = new ListBuffer[BillingRecordModel]
+      for (r: Row <- result.all()) {
+        if (r != null) {
+          val sku: BillingRecordModel = new BillingRecordModel(r.getString("uid"),
+            r.getDate("ts"),
+            r.getInt("game_id"),
+            r.getInt("sku_id"),
+            r.getInt("n_items"),
+            r.getFloat("discount"))
+          l.add(sku)
+        }
       }
+      l.toList
     }
-    l.toList
   }
 
   override def getAllBillsOfUserWithDate(uid: String, from: Date, to: Date): List[BillingRecordModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetBillsWithBoundDate", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
@@ -138,51 +142,64 @@ class BillingDAO (implicit inj: Injector) extends Billing with Injectable {
     bs.setString("uid", uid)
     bs.setDate(1, from)
     bs.setDate(2, to)
-    val result: ResultSet = session.execute(bs)
-
-    val l: ListBuffer[BillingRecordModel] = new ListBuffer[BillingRecordModel]
-    for (r: Row <- result.all()) {
-      if (r != null) {
-        val sku: BillingRecordModel = new BillingRecordModel(r.getString("uid"),
-          r.getDate("ts"),
-          r.getInt("game_id"),
-          r.getInt("sku_id"),
-          r.getInt("n_items"),
-          r.getFloat("discount"))
-        l.add(sku)
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val l: ListBuffer[BillingRecordModel] = new ListBuffer[BillingRecordModel]
+      for (r: Row <- result.all()) {
+        if (r != null) {
+          val sku: BillingRecordModel = new BillingRecordModel(r.getString("uid"),
+            r.getDate("ts"),
+            r.getInt("game_id"),
+            r.getInt("sku_id"),
+            r.getInt("n_items"),
+            r.getFloat("discount"))
+          l.add(sku)
+        }
       }
+      l.toList
     }
-    l.toList
   }
 
   override def getBillsOfUserFromGame(uid: String, gameId: Int): List[BillingRecordModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetBillsFromGame", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString("uid", uid)
     bs.setInt("game_id", gameId)
-    val result: ResultSet = session.execute(bs)
-    val r: Row = result.one()
-    val l: ListBuffer[BillingRecordModel] = new ListBuffer[BillingRecordModel]
-    if (r != null) {
-      val br: BillingRecordModel = new BillingRecordModel(r.getString("uid"),
-        r.getDate("ts"),
-        r.getInt("game_id"),
-        r.getInt("sku_id"),
-        r.getInt("n_items"),
-        r.getFloat("discount"))
-      l.add(br)
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val r: Row = result.one()
+      val l: ListBuffer[BillingRecordModel] = new ListBuffer[BillingRecordModel]
+      if (r != null) {
+        val br: BillingRecordModel = new BillingRecordModel(r.getString("uid"),
+          r.getDate("ts"),
+          r.getInt("game_id"),
+          r.getInt("sku_id"),
+          r.getInt("n_items"),
+          r.getFloat("discount"))
+        l.add(br)
+      }
+      l.toList
     }
-    l.toList
   }
 
   override def getBillsOfUserFromGameWithDate(uid: String, gameId: Int,
                                               from: Date, to: Date): List[BillingRecordModel] = {
     val ps: PreparedStatement = pStatements.getOrElse("GetBillsFromGameWithDate", null)
-    if (ps == null || !isConnected) {
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
       return null
     }
@@ -191,19 +208,25 @@ class BillingDAO (implicit inj: Injector) extends Billing with Injectable {
     bs.setInt("game_id", gameId)
     bs.setDate(2, from)
     bs.setDate(3, to)
-    val result: ResultSet = session.execute(bs)
-    val r: Row = result.one()
-    val l: ListBuffer[BillingRecordModel] = new ListBuffer[BillingRecordModel]
-    if (r != null) {
-      val br: BillingRecordModel = new BillingRecordModel(r.getString("uid"),
-        r.getDate("ts"),
-        r.getInt("game_id"),
-        r.getInt("sku_id"),
-        r.getInt("n_items"),
-        r.getFloat("discount"))
-      l.add(br)
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      val r: Row = result.one()
+      val l: ListBuffer[BillingRecordModel] = new ListBuffer[BillingRecordModel]
+      if (r != null) {
+        val br: BillingRecordModel = new BillingRecordModel(r.getString("uid"),
+          r.getDate("ts"),
+          r.getInt("game_id"),
+          r.getInt("sku_id"),
+          r.getInt("n_items"),
+          r.getFloat("discount"))
+        l.add(br)
+      }
+      l.toList
     }
-    l.toList
   }
 
 }

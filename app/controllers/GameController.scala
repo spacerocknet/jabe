@@ -7,15 +7,13 @@ import play.api.mvc.{Controller, _}
 import scaldi.{Injectable, Injector}
 import spacerock.constants.Constants
 import spacerock.persistence.cassandra.{Category, GameResult, GameInfo}
-import spacerock.utils.IdGenerator
+import spacerock.utils.{StaticVariables, IdGenerator}
 
 class GameController (implicit inj: Injector) extends Controller with Injectable {
   val gInfo = inject[GameInfo]
   val gResult = inject[GameResult]
   val category = inject[Category]
   val idGenerator = inject[IdGenerator]
-  val OkStatus = Json.obj("status" -> "OK")
-  val FailedStatus = Json.obj("status" -> "Failed")
   implicit val gameResultFmt = Json.format[GameResultModel]
 
   /**
@@ -23,14 +21,14 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
    * @return
    */
   def addNewGameInfo = Action { request =>
-    var retObj: JsObject = FailedStatus
+    var retObj: JsObject = StaticVariables.OkStatus
     try {
       val json: Option[JsValue] = request.body.asJson
 
-      val gameName: String = (json.getOrElse(null) \ "game-name").asOpt[String].getOrElse("")
+      val gameName: String = (json.getOrElse(null) \ "game_name").asOpt[String].getOrElse("")
       val description: String = (json.getOrElse(null) \ "description").asOpt[String].getOrElse("")
       val categories = (json.getOrElse(null) \ "categories").as[JsArray].as[List[String]].toSet
-      val bpg: Int = (json.getOrElse(null) \ "battles-per-game").asOpt[Int].getOrElse(-1)
+      val bpg: Int = (json.getOrElse(null) \ "battles_per_game").asOpt[Int].getOrElse(-1)
       val gameId: Int = idGenerator.generateNextId(Constants.REDIS_GAME_ID_KEY).toInt
 
       if (gInfo.addGameInfo(gameId, gameName, description, categories, bpg)) {
@@ -41,23 +39,24 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
         })
 
         if (!isSuccess) {
-          Logger.error("Insert game success, but cannot update game list in categor. %s" format json.toString)
+          Logger.error("Insert game success, but cannot update game list in category. %s" format json.toString)
+          retObj = StaticVariables.DbErrorStatus
         } else {
-          retObj = Json.obj("game-id" -> gameId)
+          retObj = Json.obj("game_id" -> gameId)
         }
       } else {
         Logger.warn("Cannot add new game to database. Please check database again. %s" format json.toString)
+        retObj = StaticVariables.DbErrorStatus
       }
-
-      Ok(retObj)
     }
     catch {
       case e:Exception => {
         e.printStackTrace()
         Logger.info("exception = %s" format e)
-        BadRequest("Invalid EAN")
+        retObj = StaticVariables.BackendErrorStatus
       }
     }
+    Ok(retObj)
   }
   /**
    * Get game info by game id. This method use GET request only
@@ -68,15 +67,18 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
      val game: GameModel = gInfo.getGameInfoByGid(gameId)
      if (game != null) {
        val gameString = Json.obj(
-                        "game-id" -> game.gameId,
-                        "game-name" -> game.gameName,
+                        "game_id" -> game.gameId,
+                        "game_name" -> game.gameName,
                         "description" -> game.gameDescription,
                         "categories" -> Json.toJson(game.categories),
-                        "battles-per-game" -> game.bpg
+                        "battles_per_game" -> game.bpg
                      )
        Ok(gameString)
     } else {
-       Ok(Json.obj())
+       if (gInfo.lastError == Constants.ErrorCode.ERROR_SUCCESS)
+        Ok(Json.obj())
+       else
+         Ok(Json.obj("status" -> gInfo.lastError))
      }
   }
 
@@ -88,25 +90,28 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
     try {
       val json: Option[JsValue] = request.body.asJson
 
-      val gameName: String = (json.getOrElse(null) \ "game-name").asOpt[String].getOrElse("")
+      val gameName: String = (json.getOrElse(null) \ "game_name").asOpt[String].getOrElse("")
 
       val game: GameModel = gInfo.getGameInfoByName(gameName)
       if (game != null) {
         val gameString = Json.obj(
-          "game-id" -> game.gameId,
-          "game-name" -> game.gameName,
+          "game_id" -> game.gameId,
+          "game_name" -> game.gameName,
           "description" -> game.gameDescription,
           "categories" -> Json.toJson(game.categories),
-          "battles-per-game" -> game.bpg
+          "battles_per_game" -> game.bpg
         )
         Ok(gameString)
       } else {
-        Ok(Json.obj())
+        if (gInfo.lastError == Constants.ErrorCode.ERROR_SUCCESS)
+          Ok(Json.obj())
+        else
+          Ok(Json.obj("status" -> gInfo.lastError))
       }
     } catch {
       case e:Exception => {
         Logger.info("exception = %s" format e)
-        BadRequest("Invalid EAN")
+        Ok(StaticVariables.BackendErrorStatus)
       }
     }
 
@@ -117,12 +122,12 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
    * @return Ok status if success, otherwise failed status, service unavailable, bad request
    */
   def addNewGameResult = Action { request =>
-    var retObj: JsValue = FailedStatus
+    var retObj: JsValue = StaticVariables.OkStatus
     try {
       val json: Option[JsValue] = request.body.asJson
 
       val uid: String = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")
-      val gid: Int = (json.getOrElse(null) \ "game-id").asOpt[Int].getOrElse(-1)
+      val gid: Int = (json.getOrElse(null) \ "game_id").asOpt[Int].getOrElse(-1)
       val level: Int = (json.getOrElse(null) \ "level").asOpt[Int].getOrElse(-1)
       val score: Long = (json.getOrElse(null) \ "score").asOpt[Long].getOrElse(-1)
 
@@ -130,18 +135,23 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
 
         val r = gResult.addResults(uid, gid, level, score)
         if (r)
-          retObj = OkStatus
+          retObj = StaticVariables.OkStatus
         else {
           Logger.warn("Cannot insert new result to database. Please check database again. %s" format json.toString)
+          if (gResult.lastError == Constants.ErrorCode.ERROR_SUCCESS)
+            Ok(StaticVariables.OkStatus)
+          else
+            Ok(Json.obj("status" -> gResult.lastError))
         }
       } else {
         Logger.warn("Bad request. %s" format json.toString)
+        Ok(StaticVariables.InputErrorStatus)
       }
       Ok(retObj)
     } catch {
       case e:Exception => {
         Logger.info("exception = %s" format e)
-        BadRequest("Invalid EAN")
+        Ok(StaticVariables.BackendErrorStatus)
       }
     }
   }
@@ -160,7 +170,10 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
       }
       Ok(Json.toJson(res))
     } else {
-      Ok(Json.obj())
+      if (gResult.lastError == Constants.ErrorCode.ERROR_SUCCESS)
+        Ok(Json.obj())
+      else
+        Ok(Json.obj("status" -> gResult.lastError))
     }
   }
 
@@ -175,7 +188,7 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
       val json: Option[JsValue] = request.body.asJson
 
       val uid: String = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")
-      val gid: Int = (json.getOrElse(null) \ "game-id").asOpt[Int].getOrElse(-1)
+      val gid: Int = (json.getOrElse(null) \ "game_id").asOpt[Int].getOrElse(-1)
 
       if (uid != "" && gid > 0) {
         val r: Map[Int, Long] = gResult.getResultsByUidOfGame(uid, gid)
@@ -195,17 +208,20 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
           sb.append("]")
           Ok(sb.toString)
         } else {
-          Ok(FailedStatus)
+          if (gResult.lastError == Constants.ErrorCode.ERROR_SUCCESS)
+            Ok(Json.arr())
+          else
+            Ok(Json.obj("status" -> gResult.lastError))
         }
       } else {
         Logger.warn("Bad request. %s" format json.toString)
-        Ok(FailedStatus)
+        Ok(StaticVariables.InputErrorStatus)
       }
     }
     catch {
       case e: Exception => {
         Logger.info("exception = %s" format e)
-        BadRequest("Invalid EAN")
+        Ok(StaticVariables.BackendErrorStatus)
       }
     }
   }

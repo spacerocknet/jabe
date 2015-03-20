@@ -9,7 +9,7 @@ import play.api.mvc.{Action, Controller}
 import scaldi.{Injector, Injectable}
 import spacerock.constants.Constants
 import spacerock.persistence.cassandra._
-import spacerock.utils.IdGenerator
+import spacerock.utils.{StaticVariables, IdGenerator}
 
 /**
  * Created by william on 2/23/15.
@@ -36,25 +36,26 @@ class SkuController(implicit inj: Injector) extends Controller with Injectable {
       // get id
       val skuId: Int = idGenerator.generateNextId(Constants.REDIS_SKU_ID_KEY).toInt
       val description: String = (json.getOrElse(null) \ "description").asOpt[String].getOrElse("")
-      val unitPrice: Float = (json.getOrElse(null) \ "unit-price").asOpt[Float].getOrElse(0.0f)
-      val startTime: Long = (json.getOrElse(null) \ "start-time").asOpt[Long].getOrElse(-1)
-      val expiredTime: Long = (json.getOrElse(null) \ "expired-time").asOpt[Long].getOrElse(-1)
-      val extraData: String = (json.getOrElse(null) \ "extra-data").asOpt[String].getOrElse("")
+      val unitPrice: Float = (json.getOrElse(null) \ "unit_price").asOpt[Float].getOrElse(0.0f)
+      val startTime: Long = (json.getOrElse(null) \ "start_time").asOpt[Long].getOrElse(-1)
+      val expiredTime: Long = (json.getOrElse(null) \ "expired_time").asOpt[Long].getOrElse(-1)
+      val extraData: String = (json.getOrElse(null) \ "extra_data").asOpt[String].getOrElse("")
       val discount: Float = (json.getOrElse(null) \ "discount").asOpt[Float].getOrElse(0.0f)
 
       if (sku.addNewSku(skuId, description, unitPrice, new Date(startTime), new Date(expiredTime),
                     extraData, discount)) {
-        retObj = Json.obj("sku-id" -> skuId)
+        retObj = Json.obj("sku_id" -> skuId)
       } else {
         Logger.warn("Cannot add new sku. Please check database again")
+        retObj = Json.obj("status" -> sku.lastError)
       }
-      Ok(retObj)
     } catch {
       case e: Exception => {
         Logger.error("exception = %s" format e)
-        ServiceUnavailable("System is currently unavailable")
+        retObj = StaticVariables.BackendErrorStatus
       }
     }
+    Ok(retObj)
   }
 
   /**
@@ -67,7 +68,7 @@ class SkuController(implicit inj: Injector) extends Controller with Injectable {
     if (res != null) {
       Ok(Json.toJson(res))
     } else {
-      Ok(FailedStatus)
+      Ok(Json.obj("status" -> sku.lastError))
     }
   }
 }

@@ -7,7 +7,7 @@ import play.api.mvc.{Controller, _}
 import scaldi.{Injectable, Injector}
 import spacerock.constants.Constants
 import spacerock.persistence.cassandra.{Category, Quiz}
-import spacerock.utils.IdGenerator
+import spacerock.utils.{StaticVariables, IdGenerator}
 
 import scala.collection.mutable
 import scala.util.Random
@@ -147,14 +147,17 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
         }
 
         Ok(JsArray(seq))
-      }
-      else {
-        BadRequest(FailedStatus)
+      } else {
+        if (quiz.lastError == Constants.ErrorCode.ERROR_SUCCESS) {
+          Ok(Json.obj())
+        } else {
+          Ok(Json.obj("status" -> quiz.lastError))
+        }
       }
     } catch {
       case e: Exception => {
         Logger.error("exception = %s" format e)
-        BadRequest("Invalid EAN")
+        Ok(StaticVariables.BackendErrorStatus)
       }
     }
   }
@@ -172,7 +175,7 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
 
       val cat = (json.getOrElse(null) \ "category").asOpt[String].getOrElse("")
       val question = (json.getOrElse(null) \ "question").asOpt[String].getOrElse("")
-      val rightAns = (json.getOrElse(null) \ "right-answer").asOpt[String].getOrElse("")
+      val rightAns = (json.getOrElse(null) \ "right_answer").asOpt[String].getOrElse("")
       val df = (json.getOrElse(null) \ "df").asOpt[Int].getOrElse(0)
       val ans1 = (json.getOrElse(null) \ "ans1").asOpt[String].getOrElse("")
       val ans2 = (json.getOrElse(null) \ "ans2").asOpt[String].getOrElse("")
@@ -189,14 +192,16 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
         }
       } else {
         Logger.warn("Bad request. %s" format json.toString)
+        retObj = StaticVariables.InputErrorStatus
       }
-      Ok(retObj)
+
     } catch {
       case e: Exception => {
         Logger.error("exception = %s" format e)
-        BadRequest("Invalid EAN")
+        retObj = StaticVariables.BackendErrorStatus
       }
     }
+    Ok(retObj)
   }
 
   /**
@@ -222,13 +227,15 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
           retObj = Json.obj("qid" -> qid)
       } else {
         Logger.warn("Bad request. %s" format json)
+        retObj = StaticVariables.InputErrorStatus
       }
-      Ok(retObj)
+
     } catch {
       case e: Exception => {
         Logger.error("exception = %s" format e)
-        BadRequest("Invalid EAN")
+        retObj = StaticVariables.BackendErrorStatus
       }
     }
+    Ok(retObj)
   }
 }
