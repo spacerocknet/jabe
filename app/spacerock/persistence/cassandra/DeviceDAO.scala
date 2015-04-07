@@ -1,5 +1,7 @@
 package spacerock.persistence.cassandra
 
+import java.util
+
 import com.datastax.driver.core._
 import models.{DeviceModel}
 import play.Logger
@@ -14,6 +16,7 @@ import scala.collection.mutable.ListBuffer
  * Created by william on 2/23/15.
  */
 
+// TODO change phone number
 trait Device {
   def addNewDevice(dUuid: String, rt: Date, uid: String = "", os: String = "", platForm: String = "", model: String = "",
                     phone: String = ""): Boolean
@@ -32,6 +35,9 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
 
   def lastError = _lastError
 
+  // initialize prepared statements
+  init
+
   def init() = {
     _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Insert new bill
@@ -43,6 +49,20 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
     else
       _lastError = sessionManager.lastError
 
+    ps = sessionManager.prepare("UPDATE spacerock.device_phone SET duuids = duuids + ? " +
+      "WHERE phone = ?;")
+    if (ps != null)
+      pStatements.put("UpdateDUuidPhoneI", ps)
+    else
+      _lastError = sessionManager.lastError
+
+    ps = sessionManager.prepare("UPDATE spacerock.device_uid SET duuids = duuids + ? " +
+      "WHERE uid = ?;")
+    if (ps != null)
+      pStatements.put("UpdateDUuidUidI", ps)
+    else
+      _lastError = sessionManager.lastError
+
     // Get device's info
     ps = sessionManager.prepare("SELECT * FROM spacerock.device WHERE duuid = ?;")
     if (ps != null)
@@ -51,20 +71,59 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
       _lastError = sessionManager.lastError
 
     // get devices by phone
-    ps = sessionManager.prepare("SELECT * FROM spacerock.device WHERE phone = ?;")
+    ps = sessionManager.prepare("SELECT duuids FROM spacerock.device_phone WHERE phone = ?;")
     if (ps != null)
-      pStatements.put("GetInfoByPhone", ps)
+      pStatements.put("GetInfoByPhoneI", ps)
     else
       _lastError = sessionManager.lastError
 
     // get devices by phone
-    ps = sessionManager.prepare("SELECT * FROM spacerock.device WHERE uid = ?;")
+    ps = sessionManager.prepare("SELECT duuids FROM spacerock.device_uid WHERE uid = ?;")
     if (ps != null)
-      pStatements.put("GetInfoByUid", ps)
+      pStatements.put("GetInfoByUidI", ps)
     else
       _lastError = sessionManager.lastError
   }
 
+  private def updateDeviceUid(uid: String, dUuid: String): Boolean = {
+    val ps: PreparedStatement = pStatements.getOrElse("UpdateDUuidUidI", null)
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
+      Logger.error("Cannot connect to database")
+      return false
+    }
+    val bs: BoundStatement = new BoundStatement(ps)
+    bs.setSet("duuids", Set[String]{dUuid})
+    bs.setString("uid", uid)
+
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
+  }
+
+  private def updateDevicePhone(phone: String, dUuid: String): Boolean = {
+    val ps: PreparedStatement = pStatements.getOrElse("UpdateDUuidPhoneI", null)
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
+      Logger.error("Cannot connect to database")
+      return false
+    }
+    val bs: BoundStatement = new BoundStatement(ps)
+    bs.setSet("duuids", Set[String]{dUuid})
+    bs.setString("phone", phone)
+
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
+  }
 
   /**
    * Add new device info to system.
@@ -95,8 +154,12 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
     bs.setDate("registered_time", rt)
 
     if (sessionManager.execute(bs) != null) {
-      _lastError = Constants.ErrorCode.ERROR_SUCCESS
-      true
+      if (updateDevicePhone(phone, dUuid) && updateDeviceUid(uid, dUuid)) {
+        _lastError = Constants.ErrorCode.ERROR_SUCCESS
+        true
+      } else {
+        false
+      }
     } else {
       _lastError = sessionManager.lastError
       false
@@ -109,7 +172,7 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
    * @return list of devices
    */
   override def getInfoByPhone(phone: String): List[DeviceModel] = {
-    val ps: PreparedStatement = pStatements.getOrElse("GetInfoByPhone", null)
+    val ps: PreparedStatement = pStatements.getOrElse("GetInfoByPhoneI", null)
     if (ps == null || !sessionManager.connected) {
       _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
@@ -124,16 +187,18 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
     } else {
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
       val l: ListBuffer[DeviceModel] = new ListBuffer[DeviceModel]
+
+
       for (r: Row <- result.all()) {
         if (r != null) {
-          val dm: DeviceModel = new DeviceModel(r.getString("duuid"),
-            r.getDate("registered_time"),
-            r.getString("uid"),
-            r.getString("os"),
-            r.getString("platform"),
-            r.getString("model"),
-            r.getString("phone"))
-          l.add(dm)
+        val duuids: util.Set[String] = r.getSet("duuids", classOf[String])
+          if (duuids != null) {
+            for (duuid <- duuids) {
+              val dm: DeviceModel = getInfoByDuuid(duuid)
+              if (dm != null)
+                l.add(dm)
+            }
+          }
         }
       }
       l.toList
@@ -191,7 +256,7 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
    * @return list of device
    */
   override def getInfoByUid(uid: String): List[DeviceModel] = {
-    val ps: PreparedStatement = pStatements.getOrElse("GetInfoByUid", null)
+    val ps: PreparedStatement = pStatements.getOrElse("GetInfoByUidI", null)
     if (ps == null || !sessionManager.connected) {
       _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
@@ -206,16 +271,18 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
     } else {
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
       val l: ListBuffer[DeviceModel] = new ListBuffer[DeviceModel]
+
+
       for (r: Row <- result.all()) {
         if (r != null) {
-          val dm: DeviceModel = new DeviceModel(r.getString("duuid"),
-            r.getDate("registered_time"),
-            r.getString("uid"),
-            r.getString("os"),
-            r.getString("platform"),
-            r.getString("model"),
-            r.getString("phone"))
-          l.add(dm)
+          val duuids: util.Set[String] = r.getSet("duuids", classOf[String])
+          if (duuids != null) {
+            for (duuid <- duuids) {
+              val dm: DeviceModel = getInfoByDuuid(duuid)
+              if (dm != null)
+                l.add(dm)
+            }
+          }
         }
       }
       l.toList

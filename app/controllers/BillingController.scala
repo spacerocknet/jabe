@@ -45,7 +45,7 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
       } else {
         // check sku
         val skuModel: SkuModel = sku.getSkuInfo(skuId)
-        if(skuModel == null) {
+        if(skuModel != null) {
           if (skuModel.expiredTime.getTime >= ts && skuModel.startTime.getTime <= ts) {
             // valid
             if (billing.addNewBill(uid, new Date(ts), gameId, skuId, nItems, totalDiscount)) {
@@ -60,7 +60,7 @@ class BillingController(implicit inj: Injector) extends Controller with Injectab
             retObj = StaticVariables.WrongInputValueStatus
           }
         } else {
-          Logger.warn(" Request to invalid sku. %s" format json.toString)
+          Logger.warn("Request to invalid sku. %s" format json.toString)
           retObj = StaticVariables.InputErrorStatus
         }
       }

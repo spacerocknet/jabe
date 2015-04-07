@@ -3,7 +3,6 @@ package spacerock.persistence.cassandra
 import java.util.Date
 
 import com.datastax.driver.core._
-import com.datastax.driver.core.exceptions.NoHostAvailableException
 import models.TokenInfo
 import play.Logger
 import scaldi.{Injectable, Injector}
@@ -28,6 +27,9 @@ class AuthCodeDAO(implicit inj: Injector) extends AuthCode with Injectable {
   var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
   def lastError = _lastError
+
+  // initialize prepared statements
+  init
 
   def init() = {
     _lastError = Constants.ErrorCode.ERROR_SUCCESS

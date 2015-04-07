@@ -32,6 +32,9 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
 
   def lastError = _lastError
 
+  // initialize prepared statements
+  init
+
   /**
    * Add new games to game list of category
    * @param category category name

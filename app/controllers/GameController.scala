@@ -15,6 +15,7 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
   val category = inject[Category]
   val idGenerator = inject[IdGenerator]
   implicit val gameResultFmt = Json.format[GameResultModel]
+  implicit val gameInfoFmt = Json.format[GameModel]
 
   /**
    * Add new game to database.
@@ -92,16 +93,16 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
 
       val gameName: String = (json.getOrElse(null) \ "game_name").asOpt[String].getOrElse("")
 
-      val game: GameModel = gInfo.getGameInfoByName(gameName)
-      if (game != null) {
-        val gameString = Json.obj(
-          "game_id" -> game.gameId,
-          "game_name" -> game.gameName,
-          "description" -> game.gameDescription,
-          "categories" -> Json.toJson(game.categories),
-          "battles_per_game" -> game.bpg
-        )
-        Ok(gameString)
+      val games: List[GameModel] = gInfo.getGameInfoByName(gameName)
+      if (games != null) {
+//        val gameString = Json.obj(
+//          "game_id" -> games.gameId,
+//          "game_name" -> games.gameName,
+//          "description" -> games.gameDescription,
+//          "categories" -> Json.toJson(games.categories),
+//          "battles_per_game" -> games.bpg
+//        )
+        Ok(Json.toJson(games))
       } else {
         if (gInfo.lastError == Constants.ErrorCode.ERROR_SUCCESS)
           Ok(Json.obj())
@@ -167,8 +168,9 @@ class GameController (implicit inj: Injector) extends Controller with Injectable
     if (uid != null) {
       if (res == null) {
         ServiceUnavailable("Service is currently unavailable")
+      } else {
+        Ok(Json.toJson(res))
       }
-      Ok(Json.toJson(res))
     } else {
       if (gResult.lastError == Constants.ErrorCode.ERROR_SUCCESS)
         Ok(Json.obj())

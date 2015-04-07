@@ -25,15 +25,18 @@ object Constants {
     val ERROR_SUCCESS: Int = 0
 
     object CassandraDb {
-      val ERROR_CAS_NO_HOST_AVAILABLE: Int = 10000
-      val ERROR_CAS_QUERY_EXECUTION: Int = 10001
-      val ERROR_CAS_QUERY_VALIDATION: Int = 10002
+      val ERROR_CAS_NO_HOST_AVAILABLE: Int   = 10000
+      val ERROR_CAS_QUERY_EXECUTION: Int     = 10001
+      val ERROR_CAS_QUERY_VALIDATION: Int    = 10002
       val ERROR_CAS_UNSUPPORTED_FEATURE: Int = 10003
-      val ERROR_CAS_NOT_INITIALIZED: Int = 10004
-      val ERROR_CAS_AUTHENTICATION: Int = 10005
-      val ERROR_CAS_ILLEGAL_STATE: Int = 10006
+      val ERROR_CAS_NOT_INITIALIZED: Int     = 10004
+      val ERROR_CAS_AUTHENTICATION: Int      = 10005
+      val ERROR_CAS_ILLEGAL_STATE: Int       = 10006
     }
 
+    object DataError {
+      val DATA_EXISTED: Int  = 20001
+    }
 
   }
 }

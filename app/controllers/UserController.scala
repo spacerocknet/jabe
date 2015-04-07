@@ -18,6 +18,7 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
   val uidBlock = inject [UidBlock]
   val idLocker = inject [CassandraLock]
   val device = inject [Device]
+  implicit val subscriberFmt = Json.format[SubscriberModel]
 
   /**
    * Get next block ids from cassandra.
@@ -27,21 +28,22 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
     var count: Int = 0
     var isCreateNew: Boolean = false
     var res: Boolean = false
-    var blocks: Set[Long] = null
+//    var blocks: Set[Long] = null
     var nextBlock: Set[String] = null
     var canLock: Boolean = idLocker.tryLock(Constants.REDIS_UID_KEY)
     while (!canLock && count < Constants.MAX_LOCK_TRIES) {
       canLock = idLocker.tryLock(Constants.REDIS_UID_KEY)
       count = count + 1
+      Thread.sleep(5)
     }
     if (canLock) {
       val nextBlkId: Int = uidBlock.getNextBlockId()
       // runs out of blocks
       if (nextBlkId < 0) {
         // generate new block
-        Logger.info("Generate new block")
-        blocks = idGenerator.generateNextBlock(Constants.REDIS_UID_KEY, Constants.MAX_UID_BLOCK_SIZE)
-        nextBlock = blocks.map(i => i.toString)
+        Logger.info("Generate new uid block")
+        nextBlock = idGenerator.generateNextBlock(Constants.MAX_UID_BLOCK_SIZE)
+//        nextBlock = blocks.map(i => i.toString)
         uidBlock.addNewBlock(idGenerator.generateNextId(Constants.REDIS_BLOCK_ID_KEY).toInt, nextBlock, true, StaticVariables.serverId)
         isCreateNew = true
       }
@@ -153,23 +155,24 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
 
       val userName = (json.getOrElse(null) \ "user_name").asOpt[String].getOrElse(null)
       if (userName != null) {
-        val subscriber: SubscriberModel = userDao.getInfoByUsername(userName)
-        if (subscriber != null) {
-          val userString = Json.obj(
-            "uid" -> (if (subscriber.uid == null) "" else subscriber.uid),
-            "user_name" -> userName,
-            "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
-            "os" -> (if (subscriber.os == null) "" else subscriber.os),
-            "model" -> (if (subscriber.model == null) "" else subscriber.model),
-            "phone" -> (if (subscriber.phone == null) "" else subscriber.phone),
-            "email" -> (if (subscriber.email == null) "" else subscriber.email),
-            "fb_id" -> (if (subscriber.fbId == null) "" else subscriber.fbId),
-            "state" -> (if (subscriber.state == null) "" else subscriber.state),
-            "region" -> (if (subscriber.region == null) "" else subscriber.region),
-            "country" -> (if (subscriber.country == null) "" else subscriber.country),
-            "apps" -> (if (subscriber.apps == null) "" else subscriber.apps))
+        val subscribers: List[SubscriberModel] = userDao.getInfoByUsername(userName)
+        if (subscribers != null) {
+//          val userString = Json.obj(
+//            "uid" -> (if (subscriber.uid == null) "" else subscriber.uid),
+//            "user_name" -> userName,
+//            "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
+//            "os" -> (if (subscriber.os == null) "" else subscriber.os),
+//            "model" -> (if (subscriber.model == null) "" else subscriber.model),
+//            "phone" -> (if (subscriber.phone == null) "" else subscriber.phone),
+//            "email" -> (if (subscriber.email == null) "" else subscriber.email),
+//            "fb_id" -> (if (subscriber.fbId == null) "" else subscriber.fbId),
+//            "state" -> (if (subscriber.state == null) "" else subscriber.state),
+//            "region" -> (if (subscriber.region == null) "" else subscriber.region),
+//            "country" -> (if (subscriber.country == null) "" else subscriber.country),
+//            "apps" -> (if (subscriber.apps == null) "" else subscriber.apps))
 
-          Ok(userString)
+//          Ok(userString)
+          Ok(Json.toJson(subscribers))
         } else {
           if (userDao.lastError == Constants.ErrorCode.ERROR_SUCCESS)
             Ok(Json.obj())

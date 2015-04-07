@@ -32,6 +32,9 @@ class GameResultDAO (implicit inj: Injector) extends GameResult with Injectable 
 
   def lastError = _lastError
 
+  // initialize prepared statements
+  init
+
   /**
    * Add new results from what user played
    * @param uid user id

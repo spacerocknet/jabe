@@ -4,6 +4,7 @@ import play.api.libs.Crypto
 import scaldi.{Injectable, Injector}
 import spacerock.cache.redis.RedisWrapper
 import spacerock.constants.Constants
+import spacerock.persistence.cassandra.ServerInfo
 
 import scala.collection.mutable
 
@@ -14,6 +15,7 @@ import scala.collection.mutable
 trait IdGenerator {
   def generateNextId(key: String): Long
   def generateNextBlock(key: String, amount: Int): Set[Long]
+  def generateNextBlock(amount: Int): Set[String]
   def generateAuthCode(uid: String, expiredTime: Long): String
   def generateAuthCode(): String
 }
@@ -24,7 +26,10 @@ trait IdGenerator {
  * @param inj
  */
 class UidGenerator (implicit inj: Injector) extends IdGenerator with Injectable {
-  val rw: RedisWrapper = inject[RedisWrapper]
+  final val idFmt: String = "%d%d%d"
+
+  val rw: RedisWrapper = inject [RedisWrapper]
+  val si: ServerInfo = inject [ServerInfo]
   final val SUFFIX_SEED_NUMBER: Int = 4096 // 12 bit
   final val PREFIX_SEED_NUMBER: Int = 8 // 3 bit ==> it should be a server identity
   final val HIGH_ORDER_BITS_FILTER: Long = 0x07FFFFFFFFFFF000L
@@ -39,8 +44,34 @@ class UidGenerator (implicit inj: Injector) extends IdGenerator with Injectable 
   }
 
   /**
-   * Generate next uid block for jabe server if needed
-   * @param key redis key
+   * Generate next uid block for Jabe server base on timestamp, host-ip and seq number.
+   * First, it connect to cassandra to get last seq number
+   * and use that as a incremental seed to produce ids.
+   * When the generation process is done, seq number of corresponding server will be updated.
+   * @param amount amount of key will be generated
+   * @return
+   */
+  override def generateNextBlock(amount: Int): Set[String] = {
+    val result: mutable.HashSet[String] = new mutable.HashSet[String]
+    var seq: Long = si.getSeqInfo(StaticVariables.serverIp)
+    if (seq < 0)
+      return null
+
+    for (i <- 0 until amount) {
+      result.add(genIdFromSeq(seq))
+      seq = seq + 1
+    }
+
+    si.insertOrUpdateServerInfo(StaticVariables.serverIp, amount)
+    result.toSet
+  }
+
+  /**
+   * Generate next uid block for Jabe server base on timestamp, host-ip and seq number.
+   * First, it connect to cassandra to get last seq number
+   * and use that as a incremental seed to produce ids.
+   * When the generation process is done, seq number of corresponding server will be updated.
+   * @param key redis key in which the method based on to generate next seq number
    * @param amount amount of key will be generated
    * @return
    */
@@ -48,7 +79,7 @@ class UidGenerator (implicit inj: Injector) extends IdGenerator with Injectable 
     val result: mutable.HashSet[Long] = new mutable.HashSet[Long]
 
     for (i <- 0 until amount) {
-      result.add(genIdFromLong(rw.getNextId(key)))
+      result.add(genIdFromLong(rw.getValueFromKey(key)))
     }
     result.toSet
   }
@@ -67,6 +98,11 @@ class UidGenerator (implicit inj: Injector) extends IdGenerator with Injectable 
     var res: Long = num | r2
     res = res | r1
     res
+  }
+
+  private def genIdFromSeq(seq: Long): String = {
+    val ts: Long = System.currentTimeMillis()
+    idFmt.format(ts, StaticVariables.serverIpInt, seq)
   }
 
   /**

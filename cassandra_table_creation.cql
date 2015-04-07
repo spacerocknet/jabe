@@ -8,11 +8,12 @@ use spacerock;
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // game_info
 CREATE TABLE IF NOT EXISTS spacerock.game_info (
-	gid int PRIMARY KEY,
+	gid int,
 	game_name text,
 	game_description text,
 	categories set<text>,
-	battles_per_game int
+	battles_per_game int,
+	PRIMARY KEY (gid)
 ) WITH 
 read_repair_chance = 0.1
 AND dclocal_read_repair_chance = 0.0
@@ -22,7 +23,21 @@ AND replicate_on_write = true
 AND caching = 'KEYS_ONLY' 
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
-CREATE INDEX game_info_name on game_info(game_name);
+///////////////////////////////////////////////////////////////////////////////////////////////
+// game_info_name
+CREATE TABLE IF NOT EXISTS spacerock.game_info_name (
+	game_name text,
+	gid int,
+	PRIMARY KEY (game_name)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // game_result
@@ -42,13 +57,16 @@ AND caching = 'KEYS_ONLY'
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
 CREATE INDEX gresult_uid on game_result(uid);
+// Use secondary index because the query that use uid is navigated first by game_id;
+// a little hard??
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // categories 
 CREATE TABLE IF NOT EXISTS spacerock.categories (
-	category text PRIMARY KEY,
+	category text,
 	game_list set<int>,
-	description text
+	description text,
+	PRIMARY KEY (category)
 ) WITH 
 read_repair_chance = 0.1
 AND dclocal_read_repair_chance = 0.0
@@ -61,15 +79,15 @@ AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.Sna
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // quizzes
 CREATE TABLE IF NOT EXISTS spacerock.quizzes (
-	qid bigint PRIMARY KEY,
+	qid bigint,
 	category text,
 	question text,
 	right_answer text,
 	df int,	
 	ans1 text,
 	ans2 text,
-	ans3 text
-	
+	ans3 text,
+	PRIMARY KEY (qid)
 ) WITH 
 read_repair_chance = 0.1
 AND dclocal_read_repair_chance = 0.0
@@ -79,8 +97,20 @@ AND replicate_on_write = true
 AND caching = 'KEYS_ONLY' 
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
-
-CREATE INDEX quizzes_category on quizzes(category);
+///////////////////////////////////////////////////////////////////////////////////////////////
+// quizzes_category
+CREATE TABLE IF NOT EXISTS spacerock.quizzes_category (
+	category text,
+	qids set<bigint>,
+	PRIMARY KEY (category)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // users
@@ -113,8 +143,20 @@ AND replicate_on_write = true
 AND caching = 'KEYS_ONLY' 
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
-CREATE INDEX user_username on users(user_name);
-
+///////////////////////////////////////////////////////////////////////////////////////////////
+// user_username
+CREATE TABLE IF NOT EXISTS spacerock.user_username (
+	user_name text,
+	uids set<text>,
+	PRIMARY KEY (user_name)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // lock table
@@ -170,9 +212,6 @@ AND replicate_on_write = true
 AND caching = 'KEYS_ONLY'
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
-CREATE INDEX start_sku on sku(start_time);
-CREATE INDEX expired_sku on sku(expired_time);
-
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // billing
 CREATE TABLE IF NOT EXISTS spacerock.billing (
@@ -214,8 +253,35 @@ AND replicate_on_write = true
 AND caching = 'KEYS_ONLY'
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
-CREATE INDEX phone_device on device(phone);
-CREATE INDEX uid_device on device(uid);
+///////////////////////////////////////////////////////////////////////////////////////////////
+// device_phone
+CREATE TABLE IF NOT EXISTS spacerock.device_phone (
+	duuids set<text>,
+	phone text,
+	PRIMARY KEY (phone)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// device_uid
+CREATE TABLE IF NOT EXISTS spacerock.device_uid (
+	duuids set<text>,
+	uid text,
+	PRIMARY KEY (uid)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // auth-code
@@ -225,6 +291,21 @@ CREATE TABLE IF NOT EXISTS spacerock.authcode (
 	expired_time timestamp,
 	status boolean,
 	PRIMARY KEY (code)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// server-info
+CREATE TABLE IF NOT EXISTS spacerock.serverinfo (
+	server_ip inet,
+	seq bigint,
+	PRIMARY KEY (server_ip)
 ) WITH
 read_repair_chance = 0.1
 AND dclocal_read_repair_chance = 0.0

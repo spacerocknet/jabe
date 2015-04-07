@@ -1,12 +1,14 @@
-package modules
+package spacerock.persistence.cassandra
 
+import play.GlobalSettings
 import scaldi.Module
-import spacerock.cache.redis.{RedisWrapperDAO, RedisWrapper}
-import spacerock.persistence.cassandra._
+import spacerock.cache.redis.{RedisWrapper, RedisWrapperDAO}
 import spacerock.utils.{IdGenerator, UidGenerator}
 
-class UserModule extends Module {
-
+/**
+ * Created by william on 3/7/15.
+ */
+class DaoTestModule extends GlobalSettings with Module {
   binding identifiedBy "cassandra.cluster" to "Test Cluster"
   binding identifiedBy "cassandra.seeds.host" to "127.0.0.1"
   binding identifiedBy "cassandra.seeds.port" to 9042
@@ -29,4 +31,5 @@ class UserModule extends Module {
   // cache
   bind [RedisWrapper] to new RedisWrapperDAO
   bind [IdGenerator] to new UidGenerator
+
 }

@@ -28,10 +28,14 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
 
   def lastError = _lastError
 
+  // initialize prepared statements
+  init
+
   def init() = {
     _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Insert new block
-    var ps: PreparedStatement = sessionManager.prepare("INSERT INTO spacerock.uid_blocks (block_id, granted_server, status, ids) " +
+    var ps: PreparedStatement = sessionManager.prepare("INSERT INTO spacerock.uid_blocks " +
+      "(block_id, granted_server, status, ids) " +
       "VALUES (?, ?, ?, ?);")
     if (ps != null)
       pStatements.put("AddNewBlock", ps)
@@ -39,7 +43,8 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
       _lastError = sessionManager.lastError
 
     // assign a block to a server.
-    ps = sessionManager.prepare("UPDATE spacerock.uid_blocks SET granted_server = ?, status = ? WHERE block_id = ?;")
+    ps = sessionManager.prepare("UPDATE spacerock.uid_blocks SET granted_server = ?, status = ? " +
+      "WHERE block_id = ? if status = false;")
     if (ps != null)
       pStatements.put("AssignBlock", ps)
     else
@@ -95,12 +100,13 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
       false
     } else {
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
-      val r: Row = result.one()
-      if (r != null) {
-        r.getBool(0)
-      } else {
-        false
-      }
+      true
+//      val r: Row = result.one()
+//      if (r != null) {
+//        r.getBool(0)
+//      } else {
+//        false
+//      }
     }
   }
 
@@ -147,8 +153,13 @@ class UidBlockDAO (implicit  inj: Injector) extends UidBlock with Injectable {
     bs.setInt("granted_server", serverId)
     bs.setBool("status", true)
     bs.setInt("block_id", blockId)
-    if (sessionManager.execute(bs) != null) {
+    val r = sessionManager.execute(bs)
+    if (r != null) {
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      if (!r.one().getBool(0)) {
+        _lastError = Constants.ErrorCode.DataError.DATA_EXISTED
+        return null
+      }
     } else {
       _lastError = sessionManager.lastError
       return null

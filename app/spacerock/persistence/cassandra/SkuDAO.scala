@@ -27,6 +27,9 @@ class SkuDAO (implicit inj: Injector) extends Sku with Injectable {
 
   def lastError = _lastError
 
+  // initialize prepared statements
+  init
+
   def init() = {
     _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Insert new sku record

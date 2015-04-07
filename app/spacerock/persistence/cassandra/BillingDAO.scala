@@ -31,6 +31,8 @@ class BillingDAO (implicit inj: Injector) extends Billing with Injectable {
   var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
   def lastError = _lastError
+  // initialize prepared statements
+  init
 
   def init() = {
     _lastError = Constants.ErrorCode.ERROR_SUCCESS
@@ -65,7 +67,7 @@ class BillingDAO (implicit inj: Injector) extends Billing with Injectable {
       _lastError = sessionManager.lastError
 
     // get all billing records of a user in a game
-    ps = sessionManager.prepare("SELECT * FROM spacerock.billing WHERE uid = ? AND game_id = ? and ts < ? and ts > ?;")
+    ps = sessionManager.prepare("SELECT * FROM spacerock.billing WHERE uid = ? AND ts < ? AND ts > ? AND game_id = ?;")
     if (ps != null)
       pStatements.put("GetBillsFromGameWithDate", ps)
     else

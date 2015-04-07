@@ -1,5 +1,7 @@
 package spacerock.utils
 
+import java.net.InetAddress
+
 import play.api.libs.json.Json
 
 import scala.collection.mutable.ListBuffer
@@ -12,6 +14,8 @@ object StaticVariables {
   val freeIds: ListBuffer[String] = new ListBuffer[String]
   // server id
   val serverId: Int = 1
+  var serverIp: InetAddress = InetAddress.getLocalHost
+  var serverIpInt: Int = -1
 
   val pk: String = "kasjFSDSd219478898vcxzqwerhj3JKHSH"
 

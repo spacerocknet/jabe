@@ -24,6 +24,9 @@ class CassandraLockDAO (implicit inj: Injector) extends CassandraLock with Injec
 
   def lastError = _lastError
 
+  // initialize prepared statements
+  init
+
   def init() = {
     _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Lock
@@ -109,12 +112,13 @@ class CassandraLockDAO (implicit inj: Injector) extends CassandraLock with Injec
       false
     } else {
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
-      val row: Row = result.one()
-      if (row != null) {
-        row.getBool(0)
-      } else {
-        false
-      }
+      true
+//      val row: Row = result.one()
+//      if (row != null) {
+//        row.getBool(0)
+//      } else {
+//        false
+//      }
     }
   }
 }

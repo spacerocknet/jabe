@@ -1,5 +1,7 @@
 package spacerock.persistence.cassandra
 
+import java.util
+
 import com.datastax.driver.core._
 import models.SubscriberModel
 import play.Logger
@@ -8,6 +10,7 @@ import spacerock.constants.Constants
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 /**
  * Created by william on 1/13/15.
@@ -15,7 +18,7 @@ import scala.collection.mutable
 
 trait UserData {
   def getInfoByUID(uuid: String): SubscriberModel
-  def getInfoByUsername(userName: String): SubscriberModel
+  def getInfoByUsername(userName: String): List[SubscriberModel]
   def addBasicInfo(uid: String, userName: String, firstName: String, lastName: String,
                       email: String, fbId: String, locState: String, locRegion: String,
                       locCountry: String, appName: String): Boolean
@@ -36,6 +39,9 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
   var _lastError: Int = Constants.ErrorCode.ERROR_SUCCESS
 
   def lastError = _lastError
+
+  // initialize prepared statements
+  init
 
   /**
    * Update last seen field on users table
@@ -99,8 +105,12 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     bs.setLong("last_seen", time)
     bs.setLong("registered_time", time)
     if (sessionManager.execute(bs) != null) {
-      _lastError = Constants.ErrorCode.ERROR_SUCCESS
-      true
+      if (updateUidName(uid, userName)) {
+        _lastError = Constants.ErrorCode.ERROR_SUCCESS
+        true
+      } else {
+        false
+      }
     } else {
       _lastError = sessionManager.lastError
       false
@@ -218,6 +228,7 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
           row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
           row.getString("fb_id"), row.getString("state"),
           row.getString("region"), row.getString("country"), row.getString("apps"))
+        subscriber.userName = row.getString("user_name")
         subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
         subscriber
       } else {
@@ -234,8 +245,8 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
    * @param userName
    * @return Subscriber model if success, otherwise null
    */
-  def getInfoByUsername(userName: String): SubscriberModel = {
-    val ps: PreparedStatement = pStatements.getOrElse("GetUserInfoByUsername", null)
+  def getInfoByUsername(userName: String): List[SubscriberModel] = {
+    val ps: PreparedStatement = pStatements.getOrElse("GetUserInfoByUsernameI", null)
     if (ps == null || !sessionManager.connected) {
       _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
@@ -248,14 +259,18 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
       val row: Row = result.one()
       if (row != null) {
-        val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
-          row.getString("os"), row.getString("model"),
-          row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
-          row.getString("fb_id"), row.getString("state"),
-          row.getString("region"), row.getString("country"), row.getString("apps"))
-        subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
-        subscriber
+        val l: ListBuffer[SubscriberModel] = new ListBuffer[SubscriberModel]
+        val uids: util.Set[String] = row.getSet("uids", classOf[String])
+        if (uids != null) {
+          for (uid <- uids) {
+            val subscriber: SubscriberModel = getInfoByUID(uid)
+            if (subscriber != null)
+              l.add(subscriber)
+          }
+        }
+        l.toList
       } else {
+        _lastError = sessionManager.lastError
         null
       }
     } else {
@@ -287,6 +302,7 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
             row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
             row.getString("fb_id"), row.getString("state"),
             row.getString("region"), row.getString("country"), row.getString("apps"))
+          sm.userName = row.getString("user_name")
           sm.deviceSet = row.getSet("device_list", classOf[String]).toSet
           l.add(sm)
         }
@@ -296,6 +312,25 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
       _lastError = sessionManager.lastError
       null
     }
+  }
+
+  private def updateUidName(uid: String, uname: String): Boolean = {
+      val ps: PreparedStatement = pStatements.getOrElse("UpdateUidNameI", null)
+      if (ps == null || !sessionManager.connected) {
+        _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
+        Logger.error("Cannot connect to database")
+        return false
+      }
+      val bs: BoundStatement = new BoundStatement(ps)
+      bs.setSet("uids", Set[String]{uid})
+      bs.setString("user_name", uname)
+      if (sessionManager.execute(bs) != null) {
+        _lastError = Constants.ErrorCode.ERROR_SUCCESS
+        true
+      } else {
+        _lastError = sessionManager.lastError
+        false
+      }
   }
 
   def init() = {
@@ -324,6 +359,14 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     else
     _lastError = sessionManager.lastError
 
+    // update inverse table user_username
+    ps = sessionManager.prepare("UPDATE spacerock.user_username SET uids = uids + ? " +
+      "WHERE user_name = ?;")
+    if (ps != null)
+      pStatements.put("UpdateUidNameI", ps)
+    else
+      _lastError = sessionManager.lastError
+
     // add device information
 
       ps = sessionManager.prepare("INSERT INTO spacerock.users (uid, device_uuid, platform, os, " +
@@ -342,10 +385,9 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     else
     _lastError = sessionManager.lastError
 
-    ps = sessionManager.prepare("SELECT * from spacerock.users where user_name = ? ALLOW FILTERING;")
-
+    ps = sessionManager.prepare("SELECT uids from spacerock.user_username where user_name = ?;")
     if (ps != null)
-      pStatements.put("GetUserInfoByUsername", ps)
+      pStatements.put("GetUserInfoByUsernameI", ps)
     else
     _lastError = sessionManager.lastError
 

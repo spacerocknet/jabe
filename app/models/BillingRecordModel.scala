@@ -11,9 +11,9 @@ case class BillingRecordModel (uid: String, ts: Date, gameId: Int, skuId: Int, n
       |"uid" : "%s",
       |"timestamp" : "%s",
       |"game_id" : %d,
-      |"sku-id" : %d,
-      |"num-items" : %d,
-      |"total-discount" : %.3f
+      |"sku_id" : %d,
+      |"num_items" : %d,
+      |"total_discount" : %.3f
       |}""".stripMargin)
   override def toString(): String = {
     fmt.format(uid, ts.toString, gameId, skuId, nItems, discount)

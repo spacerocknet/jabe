@@ -26,17 +26,20 @@ trait DbSessionManager {
  * This class will manage connections to cassandra cluster
  * @param inj Injector
  */
-class CassandraSessionManager (implicit inj: Injector) extends DbSessionManager with Injectable {
+ class CassandraSessionManager (implicit inj: Injector) extends DbSessionManager with Injectable {
 
   val clusterName = inject [String] (identified by "cassandra.cluster")
   val casHost: String = inject [String] (identified by "cassandra.seeds.host")
   val casPort: Int = inject [Int] (identified by "cassandra.seeds.port")
   var cluster: Cluster = null
-  var _session: Session = getSession
+
   val errorExceptionString = "Execute statement error with following exception: %s"
   var _lastError: Int = 0
 
+  // connect to database
   var connected: Boolean = connect()
+  // get cassandra session after connection is created
+  var _session: Session = getSession
 
   def lastError = _lastError
 

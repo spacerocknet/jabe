@@ -1,5 +1,7 @@
 package spacerock.persistence.cassandra
 
+import java.util
+
 import com.datastax.driver.core._
 import models.QuAnModel
 import play.Logger
@@ -31,6 +33,9 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
 
   def lastError = _lastError
 
+  // initialize prepared statements
+  init
+
   override def updateQuiz(qid: Long, category: String, question: String, rightAnswer: String,
                            ans1: String, ans2: String, ans3: String, df: Int): Boolean = {
     val ps: PreparedStatement = pStatements.getOrElse("UpdateQuiz", null)
@@ -50,8 +55,12 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     bs.setLong(7, qid)
 
     if (sessionManager.execute(bs) != null) {
-      _lastError = Constants.ErrorCode.ERROR_SUCCESS
-      true
+      if (updateQuizCat(qid, category)) {
+        _lastError = Constants.ErrorCode.ERROR_SUCCESS
+        true
+      } else {
+        false
+      }
     } else {
       _lastError = sessionManager.lastError
       false
@@ -89,8 +98,12 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     bs.setString(7, ans3)
 
     if (sessionManager.execute(bs) != null) {
-      _lastError = Constants.ErrorCode.ERROR_SUCCESS
-      true
+      if (updateQuizCat(qid, category)) {
+        _lastError = Constants.ErrorCode.ERROR_SUCCESS
+        true
+      } else {
+        false
+      }
     } else {
       _lastError = sessionManager.lastError
       false
@@ -137,7 +150,7 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
    * @return list of QuAn model if success, otherwise null
    */
   override def getQuizzesByCategory(category: String, num: Int): List[QuAnModel] = {
-    val ps: PreparedStatement = pStatements.getOrElse("GetQuizzesByCategory", null)
+    val ps: PreparedStatement = pStatements.getOrElse("GetQuizzesByCategoryI", null)
     if (ps == null || !sessionManager.connected) {
       _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
@@ -145,7 +158,6 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     }
     val bs: BoundStatement = new BoundStatement(ps)
     bs.setString(0, category)
-    bs.setInt(1, num)
     val result: ResultSet = sessionManager.execute(bs)
     if (result == null) {
       _lastError = sessionManager.lastError
@@ -154,13 +166,19 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
       val l: scala.collection.mutable.ListBuffer[QuAnModel] = scala.collection.mutable.ListBuffer()
 
-      for (r: Row <- result.all()) {
+      val r: Row = result.one()
         if (r != null) {
-          l.add(new QuAnModel(r.getLong("qid"), r.getString("category"), r.getString("question"),
-            r.getString("right_answer"),
-            r.getString("ans1"), r.getString("ans2"), r.getString("ans3"), r.getInt("df")))
+          val qids: util.Set[java.lang.Long] = r.getSet("qids", classOf[java.lang.Long])
+          if (qids != null) {
+            // get num of quizzes
+            for (qid <- qids) {
+              val qa = getQuizByQid(qid)
+              if (qa != null)
+                l.add(qa)
+            }
+          }
         }
-      }
+
       l.toList
     }
   }
@@ -196,6 +214,26 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     }
   }
 
+  private def updateQuizCat(qid: Long, category: String): Boolean = {
+    val ps: PreparedStatement = pStatements.getOrElse("UpdateQuizCatI", null)
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
+      Logger.error("Cannot connect to database")
+      return false
+    }
+    val bs: BoundStatement = new BoundStatement(ps)
+    bs.setSet(0, Set[Long]{qid})
+    bs.setString(1, category)
+
+    if (sessionManager.execute(bs) != null) {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    } else {
+      _lastError = sessionManager.lastError
+      false
+    }
+  }
+
   def init() = {
     _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // update quiz
@@ -203,6 +241,13 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
       "question = ?, right_answer = ?, df = ?, ans1 = ?, ans2 = ?, ans3 = ? where qid = ?;")
     if (ps != null)
       pStatements.put("UpdateQuiz", ps)
+    else
+      _lastError = sessionManager.lastError
+
+    ps = sessionManager.prepare("UPDATE spacerock.quizzes_category SET qids = qids + ? " +
+      "WHERE category = ?;")
+    if (ps != null)
+      pStatements.put("UpdateQuizCatI", ps)
     else
       _lastError = sessionManager.lastError
 
@@ -221,9 +266,9 @@ class QuizDAO (implicit inj: Injector) extends Quiz with Injectable {
     else
       _lastError = sessionManager.lastError
 
-    ps = sessionManager.prepare("SELECT * from spacerock.quizzes where category = ? LIMIT ? ALLOW FILTERING;")
+    ps = sessionManager.prepare("SELECT qids from spacerock.quizzes_category where category = ?;")
     if (ps != null)
-      pStatements.put("GetQuizzesByCategory", ps)
+      pStatements.put("GetQuizzesByCategoryI", ps)
     else
       _lastError = sessionManager.lastError
 
