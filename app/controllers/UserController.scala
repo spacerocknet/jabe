@@ -30,9 +30,9 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
     var res: Boolean = false
 //    var blocks: Set[Long] = null
     var nextBlock: Set[String] = null
-    var canLock: Boolean = idLocker.tryLock(Constants.REDIS_UID_KEY)
+    var canLock: Boolean = idLocker.tryLock(Constants.LOCK_UID_KEY)
     while (!canLock && count < Constants.MAX_LOCK_TRIES) {
-      canLock = idLocker.tryLock(Constants.REDIS_UID_KEY)
+      canLock = idLocker.tryLock(Constants.LOCK_UID_KEY)
       count = count + 1
       Thread.sleep(5)
     }
@@ -44,7 +44,8 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
         Logger.info("Generate new uid block")
         nextBlock = idGenerator.generateNextBlock(Constants.MAX_UID_BLOCK_SIZE)
 //        nextBlock = blocks.map(i => i.toString)
-        uidBlock.addNewBlock(idGenerator.generateNextId(Constants.REDIS_BLOCK_ID_KEY).toInt, nextBlock, true, StaticVariables.serverId)
+        uidBlock.addNewBlock(idGenerator.generateNextId(Constants.REDIS_BLOCK_ID_KEY).toInt,
+                             nextBlock, true, StaticVariables.serverId)
         isCreateNew = true
       }
       if (!isCreateNew) {
@@ -52,7 +53,7 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
       }
       nextBlock.foreach(id => StaticVariables.freeIds.add(id))
       // unlock key
-      idLocker.unlock(Constants.REDIS_UID_KEY)
+      idLocker.unlock(Constants.LOCK_UID_KEY)
       res = true
     }
 
@@ -61,7 +62,7 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
 
   /**
    * Generate uuid for client
-   * @return client id object if succes, otherwise Service unavailable
+   * @return client id object if success, otherwise Service unavailable
    */
   def generateUniqueId() = Action {
     var count: Int = 0

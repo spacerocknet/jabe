@@ -314,3 +314,207 @@ AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4,
 AND replicate_on_write = true
 AND caching = 'KEYS_ONLY'
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// user-game-profile
+CREATE TABLE IF NOT EXISTS spacerock.user_game_profile (
+	uid string,
+	game_id int,
+	level int,
+	occupation int,
+	ability_ids set<int>,
+	skills set<int>,
+	diamonds_balance int,
+	coin_balance int
+	PRIMARY KEY (uid, game_id, level)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// profession_prob
+CREATE TABLE IF NOT EXISTS spacerock.profession_prob (
+	profession_level text,
+	probs map<text, int>,
+	PRIMARY KEY (profession_level)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// piece
+CREATE TABLE IF NOT EXISTS spacerock.piece (
+	piece_id int,
+	category_name text,
+	description text,
+	image_id text,
+	tittle text,
+	PRIMARY KEY (piece_id)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// boost
+CREATE TABLE IF NOT EXISTS spacerock.boost (
+	boost_id int,
+	can_do int,
+	description text,
+	PRIMARY KEY (boost_id)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// achievement
+CREATE TABLE IF NOT EXISTS spacerock.achievement (
+	achievement_id int,
+	description text,
+	PRIMARY KEY (achievement_id)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// video
+CREATE TABLE IF NOT EXISTS spacerock.video (
+	video_id bigint,
+	video_name text,
+	short_description text,
+	full_description text,
+	view_count bigint,
+	link text,
+	published_time bigint
+	PRIMARY KEY (video_id)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// video_name_id
+CREATE TABLE IF NOT EXISTS spacerock.video_name_id (
+	video_id bigint,
+	video_name text,
+	PRIMARY KEY (video_name)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// uid_video
+CREATE TABLE IF NOT EXISTS spacerock.uid_video (
+	video_id bigint,
+	day_epoch int,
+	uid text,
+	watched_time bigint,
+	PRIMARY KEY (uid, day_epoch, video_id, watched_time)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// video_uid
+CREATE TABLE IF NOT EXISTS spacerock.video_uid (
+	video_id bigint,
+	uid text,
+	watched_time bigint,
+	PRIMARY KEY (video_id, uid, watched_time)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// ability
+CREATE TABLE IF NOT EXISTS spacerock.ability (
+	ability_id int,
+	ability_name text,
+	description text,
+	value int,
+	PRIMARY KEY (ability_id)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// avatar
+CREATE TABLE IF NOT EXISTS spacerock.avatar (
+	avatar_id bigint,
+	hair_id bigint,
+	hat_id bigint,
+	shirt_id bigint,
+	shoes_id bigint,
+	PRIMARY KEY (avatar_id)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// avatar_history
+CREATE TABLE IF NOT EXISTS spacerock.avatar_history (
+	uid text,
+	avatar_id bigint,
+	PRIMARY KEY (uid, avatar_id)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};

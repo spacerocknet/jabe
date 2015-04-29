@@ -43,7 +43,7 @@ class CategoryController (implicit inj: Injector) extends Controller with Inject
         if (cat != null) {
           val jsonObj = Json.obj("category" -> cat.category,
             "description" -> cat.description,
-            "game-id" -> Json.toJson(cat.gameIds))
+            "game_id" -> Json.toJson(cat.gameIds))
           retObj = jsonObj
         } else {
           Logger.warn("Get category by name failed: %s" format catName)

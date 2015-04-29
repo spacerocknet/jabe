@@ -1,7 +1,5 @@
 package models
 
-import scala.collection.mutable.HashSet
-
 /**
  * An entry in the question/answer catalogue.
  *
