@@ -319,14 +319,14 @@ AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.Sna
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // user-game-profile
 CREATE TABLE IF NOT EXISTS spacerock.user_game_profile (
-	uid string,
+	uid text,
 	game_id int,
 	level int,
 	occupation int,
 	ability_ids set<int>,
 	skills set<int>,
 	diamonds_balance int,
-	coin_balance int
+	coin_balance int,
 	PRIMARY KEY (uid, game_id, level)
 ) WITH
 read_repair_chance = 0.1
@@ -410,7 +410,7 @@ CREATE TABLE IF NOT EXISTS spacerock.video (
 	full_description text,
 	view_count bigint,
 	link text,
-	published_time bigint
+	published_time bigint,
 	PRIMARY KEY (video_id)
 ) WITH
 read_repair_chance = 0.1

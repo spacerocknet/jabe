@@ -7,8 +7,8 @@ import spacerock.utils.{StaticVariables, Utilities}
 
 object Global extends GlobalSettings with ScaldiSupport {
   def applicationModule = new WebModule :: new UserModule
-  StaticVariables.serverIp = InetAddress.getByName(inject [String] (identified by "server.ip"))
-  StaticVariables.serverIpInt = Utilities.ipToInt(StaticVariables.serverIp)
+  //StaticVariables.serverIp = InetAddress.getByName(inject [String] (identified by "server.ip"))
+  //StaticVariables.serverIpInt = Utilities.ipToInt(StaticVariables.serverIp)
 
 //  override def onStop(app: App): Unit = {
 //
