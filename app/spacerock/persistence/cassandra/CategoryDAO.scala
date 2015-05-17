@@ -5,10 +5,10 @@ import models.CategoryModel
 import play.Logger
 import scaldi.{Injectable, Injector}
 import spacerock.constants.Constants
-
 import scala.collection.JavaConversions._
 import scala.collection.immutable.HashSet
 import scala.collection.mutable
+import models.CategoryModelGame
 
 /**
  * Created by william on 1/13/15.
@@ -21,7 +21,7 @@ trait Category {
   def addNewGames(category: String, gameIds: Set[Int]): Boolean
   def addNewGame(category: String, gameId: Int): Boolean
   def getAllCategories(): List[CategoryModel]
-  def getAllCategoriesByGameId(gid : Integer): List[CategoryModel]
+  def getAllCategoriesByGameId(gid : Integer): List[CategoryModelGame]
   def lastError: Int
 }
 
@@ -196,7 +196,7 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
    * Get all categories from system for a specified game id
    * @return list of categories
    */
-   def getAllCategoriesByGameId(gid : Int): List[CategoryModel] = {
+   def getAllCategoriesByGameId(gid : Int): List[CategoryModelGame] = {
     //TODOs: filtering out game id from the results
     val ps: PreparedStatement = pStatements.getOrElse("GetAllCategories", null)
     if (ps == null || !sessionManager.connected) {
@@ -210,11 +210,11 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
       _lastError = sessionManager.lastError
       null
     } else {
-      val l: scala.collection.mutable.ListBuffer[CategoryModel] = scala.collection.mutable.ListBuffer()
+      val l: scala.collection.mutable.ListBuffer[CategoryModelGame] = scala.collection.mutable.ListBuffer()
       for (r: Row <- result.all()) {
         if (r != null) {
-          l.add(new CategoryModel(r.getString("category"),
-                                  r.getString("description"))
+          l.add(new CategoryModelGame(r.getString("category"),
+                                  r.getString("description")))
         }
       }
       l.toList

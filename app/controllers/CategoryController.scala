@@ -10,7 +10,7 @@ import spacerock.utils.StaticVariables
 
 class CategoryController (implicit inj: Injector) extends Controller with Injectable {
   val category = inject[Category]
-  implicit val catFmt = Json.format[CategoryModel]
+  //implicit val catFmt = Json.format[CategoryModel]
   final val EMPTY_JSON: JsObject = Json.obj()
 
   /**
@@ -35,7 +35,7 @@ class CategoryController (implicit inj: Injector) extends Controller with Inject
   def getAllCategoryForGame(gid: Int) = Action {
     try {
       if (gid >= 0) {
-        val list: List[CategoryModel] = category.getAllCategoriesByGameId(gid)
+        val list: List[CategoryModelGame] = category.getAllCategoriesByGameId(gid)
         if (list != null) {
            Ok(Json.toJson(list))
         } else {

@@ -21,7 +21,7 @@ case class CategoryModel (category: String, description: String, gameIds: List[I
 }
 
 
-case class CategoryModel (category: String, description: String) {
+case class CategoryModelGame (category: String, description: String) {
   final val fmt =
     """
       |"{
