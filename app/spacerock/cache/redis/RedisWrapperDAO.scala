@@ -16,7 +16,7 @@ trait RedisWrapper {
 
 class RedisWrapperDAO (implicit inj: Injector) extends RedisWrapper with Injectable {
   final val TIME_OUT = 10000
-  val jedis: Jedis = connect("127.0.0.1", 10001)
+  val jedis: Jedis = connect("127.0.0.1", 6379)
 
   def connect(host: String, port: Int): Jedis = {
     val j: Jedis = new Jedis(host, port, TIME_OUT);
