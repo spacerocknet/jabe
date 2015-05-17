@@ -19,3 +19,18 @@ case class CategoryModel (category: String, description: String, gameIds: List[I
     fmt.format(category, description, Json.toJson(gameIds))
   }
 }
+
+
+case class CategoryModel (category: String, description: String) {
+  final val fmt =
+    """
+      |"{
+      |category" : "%s",
+      |"description" : "%s"
+      |}
+    """.stripMargin
+
+  override def toString(): String = {
+    fmt.format(category, description)
+  }
+}

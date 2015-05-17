@@ -14,7 +14,7 @@ class CategoryController (implicit inj: Injector) extends Controller with Inject
   final val EMPTY_JSON: JsObject = Json.obj()
 
   /**
-   * Get all category from system
+   * Get all categories from system
    * @return Ok status with list of all category, or failed status otherwise
    */
   def getAllCategory = Action {
@@ -25,6 +25,31 @@ class CategoryController (implicit inj: Injector) extends Controller with Inject
     } else {
       Logger.warn("Cannot get all category. Please check database again")
       Ok(StaticVariables.DbErrorStatus)
+    }
+  }
+  
+    /**
+   * Get all categories from system for a specified game id
+   * @return Ok status with list of all category, or failed status otherwise
+   */
+  def getAllCategoryForGame(gid: Int) = Action {
+    try {
+      if (gid >= 0) {
+        val list: List[CategoryModel] = category.getAllCategoriesByGameId(gid)
+        if (list != null) {
+           Ok(Json.toJson(list))
+        } else {
+           Logger.warn("Cannot get all category. Please check database again")
+           Ok(StaticVariables.DbErrorStatus)
+        }
+      } else {
+        BadRequest("Error")
+      }
+    } catch {
+      case e: Exception => {
+        Logger.error("exception = %s" format e)
+        BadRequest("System error")
+      }
     }
   }
 

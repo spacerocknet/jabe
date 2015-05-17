@@ -14,6 +14,7 @@ GET         /v1/game/getresult/:uid           @controllers.GameController.getGam
 POST        /v1/game/getresult                @controllers.GameController.getGameResultByUidGame
 #---------------------------------------------------------------------------------------------
 # Category
+GET         /v1/cat/game/:gid                 @controllers.CategoryController.getAllCategoryForGame(gid: Int)
 GET         /v1/cat/all                       @controllers.CategoryController.getAllCategory
 POST        /v1/cat/getbyname                 @controllers.CategoryController.getCategoryByName
 POST        /v1/cat/add                       @controllers.CategoryController.addCategory

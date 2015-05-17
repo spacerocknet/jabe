@@ -21,6 +21,7 @@ trait Category {
   def addNewGames(category: String, gameIds: Set[Int]): Boolean
   def addNewGame(category: String, gameId: Int): Boolean
   def getAllCategories(): List[CategoryModel]
+  def getAllCategoriesByGameId(gid : Integer): List[CategoryModel]
   def lastError: Int
 }
 
@@ -184,7 +185,36 @@ class CategoryDAO (implicit inj: Injector) extends Category with Injectable {
         if (r != null) {
           l.add(new CategoryModel(r.getString("category"),
             r.getString("description"),
-            r.getSet("game_list", classOf[Integer]).toList.map(ii => ii * 1)))
+            r.getSet("game_list", classOf[Integer]).toList.map(ii => ii.asInstanceOf[Int] )))
+        }
+      }
+      l.toList
+    }
+  }
+  
+    /**
+   * Get all categories from system for a specified game id
+   * @return list of categories
+   */
+   def getAllCategoriesByGameId(gid : Int): List[CategoryModel] = {
+    //TODOs: filtering out game id from the results
+    val ps: PreparedStatement = pStatements.getOrElse("GetAllCategories", null)
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
+      Logger.error("Cannot connect to database")
+      return null
+    }
+    val bs: BoundStatement = new BoundStatement(ps)
+    val result: ResultSet = sessionManager.execute(bs)
+    if (result == null) {
+      _lastError = sessionManager.lastError
+      null
+    } else {
+      val l: scala.collection.mutable.ListBuffer[CategoryModel] = scala.collection.mutable.ListBuffer()
+      for (r: Row <- result.all()) {
+        if (r != null) {
+          l.add(new CategoryModel(r.getString("category"),
+                                  r.getString("description"))
         }
       }
       l.toList
