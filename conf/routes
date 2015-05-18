@@ -30,7 +30,6 @@ POST        /v1/user/updateinfo               @controllers.UserController.update
 # Quizzes
 GET         /v1/quiz/all                      @controllers.QuizController.getAllQuiz
 GET         /v1/quiz/byid/:qid                @controllers.QuizController.getQuizById(qid: Long)
-POST        /v1/quiz/bycat                    @controllers.QuizController.getQuizByCategory
 POST        /v1/quiz/request                  @controllers.QuizController.quizRequest
 POST        /v1/quiz/add                      @controllers.QuizController.addNewQuiz
 POST        /v1/quiz/update                   @controllers.QuizController.updateQuiz

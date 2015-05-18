@@ -60,7 +60,7 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
       case e:Exception => {
         e.printStackTrace()
         Logger.info("exception = %s" format e)
-        BadRequest("Invalid EAN")
+        BadRequest("Invalid Input")
       }
     }
   }
@@ -204,38 +204,4 @@ class QuizController(implicit inj: Injector) extends Controller with Injectable 
     Ok(retObj)
   }
 
-  /**
-   * Update quiz's info. Json body contains: category, question, right answer, df, answer 1, answer 2, answer 3.
-   * @return quiz's id if success, otherwise Failed status, bad request.
-   */
-  def updateQuiz = Action { request =>
-    var retObj: JsObject = FailedStatus
-    try {
-      val json: Option[JsValue] = request.body.asJson
-      val qid: Long = (json.getOrElse(null) \ "qid").asOpt[Long].getOrElse(-1)
-      val category = (json.getOrElse(null) \ "category").asOpt[String].orNull(null)
-      val question = (json.getOrElse(null) \ "question").asOpt[String].orNull(null)
-      val rightAns = (json.getOrElse(null) \ "right_answer").asOpt[String].orNull(null)
-      val df = (json.getOrElse(null) \ "df").asOpt[Int].getOrElse(0)
-      val ans1 = (json.getOrElse(null) \ "ans1").asOpt[String].orNull(null)
-      val ans2 = (json.getOrElse(null) \ "ans2").asOpt[String].orNull(null)
-      val ans3 = (json.getOrElse(null) \ "ans3").asOpt[String].orNull(null)
-
-      if ((category != null) && (qid >= 0)) {
-        val res: Boolean = quiz.updateQuiz(qid, category, question, rightAns, ans1, ans2, ans3, df)
-        if (res)
-          retObj = Json.obj("qid" -> qid)
-      } else {
-        Logger.warn("Bad request. %s" format json)
-        retObj = StaticVariables.InputErrorStatus
-      }
-
-    } catch {
-      case e: Exception => {
-        Logger.error("exception = %s" format e)
-        retObj = StaticVariables.BackendErrorStatus
-      }
-    }
-    Ok(retObj)
-  }
 }

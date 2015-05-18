@@ -10,7 +10,8 @@ import spacerock.utils.StaticVariables
 
 class CategoryController (implicit inj: Injector) extends Controller with Injectable {
   val category = inject[Category]
-  //implicit val catFmt = Json.format[CategoryModel]
+  implicit val catFmt = Json.format[CategoryModel]
+  implicit val catGameFmt = Json.format[CategoryModelGame]
   final val EMPTY_JSON: JsObject = Json.obj()
 
   /**

@@ -11,7 +11,7 @@ case class CategoryModel (category: String, description: String, gameIds: List[I
       |"{
       |category" : "%s",
       |"description" : "%s",
-      |"game-ids" : %s
+      |"game-ids" : %s"
       |}
     """.stripMargin
 
@@ -25,7 +25,7 @@ case class CategoryModelGame (category: String, description: String) {
   final val fmt =
     """
       |"{
-      |category" : "%s",
+      | category" : "%s",
       |"description" : "%s"
       |}
     """.stripMargin

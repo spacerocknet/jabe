@@ -21,7 +21,7 @@ trait Category {
   def addNewGames(category: String, gameIds: Set[Int]): Boolean
   def addNewGame(category: String, gameId: Int): Boolean
   def getAllCategories(): List[CategoryModel]
-  def getAllCategoriesByGameId(gid : Integer): List[CategoryModelGame]
+  def getAllCategoriesByGameId(gid : Int): List[CategoryModelGame]
   def lastError: Int
 }
 
