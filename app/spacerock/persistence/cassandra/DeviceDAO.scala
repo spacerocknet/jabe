@@ -41,7 +41,7 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
   def init() = {
     _lastError = Constants.ErrorCode.ERROR_SUCCESS
     // Insert new bill
-    var ps: PreparedStatement = sessionManager.prepare("INSERT INTO spacerock.device (" +
+    var ps: PreparedStatement = sessionManager.prepare("INSERT INTO spacerock.devices (" +
       "duuid, uid, os, platform, model, phone, registered_time) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?);")
     if (ps != null)
@@ -64,7 +64,7 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
       _lastError = sessionManager.lastError
 
     // Get device's info
-    ps = sessionManager.prepare("SELECT * FROM spacerock.device WHERE duuid = ?;")
+    ps = sessionManager.prepare("SELECT * FROM spacerock.devices WHERE duuid = ?;")
     if (ps != null)
       pStatements.put("GetInfoByDUuid", ps)
     else
@@ -154,12 +154,14 @@ class DeviceDAO (implicit inj: Injector) extends Device with Injectable {
     bs.setDate("registered_time", rt)
 
     if (sessionManager.execute(bs) != null) {
-      if (updateDevicePhone(phone, dUuid) && updateDeviceUid(uid, dUuid)) {
-        _lastError = Constants.ErrorCode.ERROR_SUCCESS
-        true
-      } else {
-        false
-      }
+      //if (updateDevicePhone(phone, dUuid) && updateDeviceUid(uid, dUuid)) {
+      //if ( 
+      // _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      //  true
+      //} else {
+      //  false
+      //}
+      true
     } else {
       _lastError = sessionManager.lastError
       false

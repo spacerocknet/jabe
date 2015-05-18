@@ -251,18 +251,19 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
       var uid: String = null
 
       // get or generate new uid
-      if (StaticVariables.freeIds.isEmpty) {
-        if (getNewBlockIds) {
-          Logger.info("Get new block ids successful")
-        } else {
-          Logger.warn("Cannot get new uid block")
-        }
-      }
-      try {
-        uid = StaticVariables.freeIds.remove(0)
-      } catch {
-        case e: Exception => { Logger.info("exception = %s" format e); uid = ""}
-      }
+      //if (StaticVariables.freeIds.isEmpty) {
+      //  if (getNewBlockIds) {
+      //    Logger.info("Get new block ids successful")
+      //  } else {
+      //    Logger.warn("Cannot get new uid block")
+      //  }
+      ///}
+      //try {
+      //  uid = StaticVariables.freeIds.remove(0)
+      //} catch {
+      //  case e: Exception => { Logger.info("exception = %s" format e); uid = ""}
+      //}
+      uid = deviceUuid + ":" + phone
       if (uid != null && !uid.equals("")) {
         val subscriber = new SubscriberModel(uid, platform, os, model, phone, deviceUuid)
         var status: Boolean = userDao.addDeviceInfo(subscriber)

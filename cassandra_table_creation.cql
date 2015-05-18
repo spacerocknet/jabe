@@ -235,7 +235,7 @@ CREATE INDEX gameid_billing on billing(game_id);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // device
-CREATE TABLE IF NOT EXISTS spacerock.device (
+CREATE TABLE IF NOT EXISTS spacerock.devices (
 	duuid text,
 	uid text,
 	os text,
@@ -243,7 +243,7 @@ CREATE TABLE IF NOT EXISTS spacerock.device (
 	model text,
 	phone text,
 	registered_time timestamp,
-	PRIMARY KEY (duuid)
+	PRIMARY KEY (duuid, uid)
 ) WITH
 read_repair_chance = 0.1
 AND dclocal_read_repair_chance = 0.0
