@@ -518,3 +518,57 @@ AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4,
 AND replicate_on_write = true
 AND caching = 'KEYS_ONLY'
 AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// game_sessions
+CREATE TABLE IF NOT EXISTS spacerock.game_sessions (
+	game_session_id text,
+	state int,
+	uid_1 text,
+	puzzle_pieces_1 int,
+	uid_1_last_move bigint,
+	uid_2 text,
+	puzzle_pieces_2 int,
+	uid_2_last_move bigint,
+	current_turn int,
+	current_round int,
+	PRIMARY KEY (game_session_id)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// user_game_sessions
+CREATE TABLE IF NOT EXISTS spacerock.user_game_sessions (
+	uid text,
+	game_session_ids set<text>,
+	PRIMARY KEY (uid)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// open_game_session
+CREATE TABLE IF NOT EXISTS spacerock.open_game_session (
+	game_session_id text,
+	PRIMARY KEY (game_session_id)
+) WITH
+read_repair_chance = 0.1
+AND dclocal_read_repair_chance = 0.0
+AND gc_grace_seconds = 864000
+AND compaction = {'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 4, 'max_threshold' : 32 }
+AND replicate_on_write = true
+AND caching = 'KEYS_ONLY'
+AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.SnappyCompressor'};
