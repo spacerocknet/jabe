@@ -8,6 +8,7 @@ import scaldi.Module
 import scaldi.play.ScaldiSupport
 import spacerock.persistence.cassandra._
 import models.OpenGameSessionModel
+import models.UserGameSessionModel
 
 
 
@@ -24,6 +25,7 @@ class CassandraDAOSpec extends Specification with Injectable {
              bind [Category] to new CategoryDAO
              bind [OpenGameSession] to new OpenGameSessionDAO
              bind [GameSession] to new GameSessionDAO
+             bind [UserGameSession] to new UserGameSessionDAO
   }
   
   
@@ -77,5 +79,17 @@ class CassandraDAOSpec extends Specification with Injectable {
         gameSessionDao.updateGameSessionState("gamesession_1", 10)
         gameSessionDao.removeGameSession("gamesession_1")
      }
+     
+     "Test UserGameSession" in {
+        val userGameSessionDao = inject[UserGameSession]
+        userGameSessionDao.addNewUserGameSession("minh_uid", "gamesession_1")
+        userGameSessionDao.addGameSessionIntoExistingRecord("minh_uid", "gamesession_2")
+        userGameSessionDao.removeGameSession("minh_uid", "gamesession_1")
+        val userGameSession : UserGameSessionModel = userGameSessionDao.getUserGameSessionsByUid("minh_uid")
+        userGameSession.gameSessionIds must have size(1)
+
+        true
+     }
+      
   }
 }

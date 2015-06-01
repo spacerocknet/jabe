@@ -11,6 +11,8 @@ object Constants {
   val REDIS_SKU_ID_KEY: String = "sku-id"
   val REDIS_GAME_ID_KEY: String = "game-id"
 
+  
+  
   //
   val MAX_UID_BLOCK_SIZE: Int = 1000
 
@@ -39,4 +41,10 @@ object Constants {
     }
 
   }
+  
+  object GameSessionState extends Enumeration {
+      type GameSessionState = Value
+      val Init, Waiting, Joined, Ongoing, End = Value 
+  }
+
 }

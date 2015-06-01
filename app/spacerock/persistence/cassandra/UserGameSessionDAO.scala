@@ -19,7 +19,7 @@ import spacerock.constants.Constants
 
 trait UserGameSession {
   def addNewUserGameSession(uid: String, gameSessionId: String): Boolean
-  def addNewGameSession(uid: String, gameSessionId: String): Boolean
+  def addGameSessionIntoExistingRecord(uid: String, gameSessionId: String): Boolean
   def removeGameSession(uid: String, gameSessionId: String): Boolean
   def getUserGameSessionsByUid(uid: String): UserGameSessionModel
   def lastError: Int
@@ -71,8 +71,8 @@ class UserGameSessionDAO (implicit inj: Injector) extends UserGameSession with I
    * @param gameSessionId
    * @return true if update successfully, false otherwise
    */
-  override def addNewGameSession(uid: String, gameSessionId: String): Boolean = {
-    val ps: PreparedStatement = pStatements.getOrElse("AddGameSessionId", null)
+  override def addGameSessionIntoExistingRecord(uid: String, gameSessionId: String): Boolean = {
+    val ps: PreparedStatement = pStatements.getOrElse("AddGameSessionIntoExistingRecord", null)
     if (ps == null || !sessionManager.connected) {
       _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
@@ -81,8 +81,8 @@ class UserGameSessionDAO (implicit inj: Injector) extends UserGameSession with I
     val bs: BoundStatement = new BoundStatement(ps)
     val set: mutable.HashSet[String] = new mutable.HashSet[String]
     set.add(gameSessionId)
-    bs.setString(0, uid)
-    bs.setSet(1, set)
+    bs.setString("uid", uid)
+    bs.setSet("game_session_ids", set)
 
     if (sessionManager.execute(bs) == null) {
       _lastError = sessionManager.lastError
@@ -110,8 +110,8 @@ class UserGameSessionDAO (implicit inj: Injector) extends UserGameSession with I
     val bs: BoundStatement = new BoundStatement(ps)
     val set: mutable.HashSet[String] = new mutable.HashSet[String]
     set.add(gameSessionId)
-    bs.setString(0, uid)
-    bs.setSet(1, set)
+    bs.setSet(0, set)
+    bs.setString(1, uid)
 
     if (sessionManager.execute(bs) == null) {
       _lastError = sessionManager.lastError
@@ -170,7 +170,7 @@ class UserGameSessionDAO (implicit inj: Injector) extends UserGameSession with I
     ps = sessionManager.prepare("UPDATE spacerock.user_game_sessions SET " +
       "game_session_ids = game_session_ids + ? where uid = ?;")
     if (ps != null)
-      pStatements.put("AddGameSessionId", ps)
+      pStatements.put("AddGameSessionIntoExistingRecord", ps)
     else
       _lastError = sessionManager.lastError
 
