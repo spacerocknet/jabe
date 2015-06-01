@@ -2,9 +2,11 @@ package spacerock.utils
 
 import java.net.InetAddress
 
-import play.api.libs.json.Json
-
 import scala.collection.mutable.ListBuffer
+
+import play.api.libs.json.Json
+import play.api.libs.json.Json.toJsFieldJsValueWrapper
+
 /**
  * Created by william on 2/23/15.
  */
@@ -34,4 +36,5 @@ object StaticVariables {
                           3 -> "Bad input format",
                           4 -> "Wrong input value",
                           5 -> "No id")
+                            
 }

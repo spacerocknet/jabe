@@ -9,26 +9,13 @@ import scaldi.play.ScaldiSupport
 import spacerock.persistence.cassandra._
 import models.OpenGameSessionModel
 import models.UserGameSessionModel
+import modules.UserModule
 
 
 
 class CassandraDAOSpec extends Specification with Injectable {
-  implicit val injector = new Module {
-             binding identifiedBy 'host and 'google to "www.google.com"
-             binding identifiedBy 'host and 'yahoo to "www.yahoo.com"
-             
-             binding identifiedBy "cassandra.cluster" to "Test Cluster"
-             binding identifiedBy "cassandra.seeds.host" to "127.0.0.1"
-             binding identifiedBy "cassandra.seeds.port" to 9042
-             // persistence
-             bind [DbSessionManager] to new CassandraSessionManager
-             bind [Category] to new CategoryDAO
-             bind [OpenGameSession] to new OpenGameSessionDAO
-             bind [GameSession] to new GameSessionDAO
-             bind [UserGameSession] to new UserGameSessionDAO
-  }
-  
-  
+
+  implicit val injector = new UserModule
 
   "The 'Hello world' string" should {
     "contain 11 characters" in {

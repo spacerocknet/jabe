@@ -1,7 +1,5 @@
 package spacerock.persistence.cassandra
 
-
-
 import com.datastax.driver.core._
 import models.CategoryModel
 import play.Logger
@@ -14,8 +12,6 @@ import models.GameSessionModel
 import models.UserGameSessionModel
 import models.OpenGameSessionModel
 import spacerock.constants.Constants
-
-
 
 
 trait OpenGameSession {
