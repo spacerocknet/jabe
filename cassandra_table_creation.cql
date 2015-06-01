@@ -561,7 +561,7 @@ AND compression = {'sstable_compression' : 'org.apache.cassandra.io.compress.Sna
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // open_game_session
-CREATE TABLE IF NOT EXISTS spacerock.open_game_session (
+CREATE TABLE IF NOT EXISTS spacerock.open_game_sessions (
 	game_session_id text,
 	PRIMARY KEY (game_session_id)
 ) WITH

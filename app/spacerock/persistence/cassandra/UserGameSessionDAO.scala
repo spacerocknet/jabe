@@ -13,6 +13,7 @@ import scala.collection.mutable
 import models.CategoryModelGame
 import models.GameSessionModel
 import models.UserGameSessionModel
+import spacerock.constants.Constants
 
 
 
@@ -20,7 +21,7 @@ trait UserGameSession {
   def addNewUserGameSession(uid: String, gameSessionId: String): Boolean
   def addNewGameSession(uid: String, gameSessionId: String): Boolean
   def removeGameSession(uid: String, gameSessionId: String): Boolean
-  def getAllGameSessionsByUid(uid : Int): List[GameSessionModel]
+  def getUserGameSessionsByUid(uid: String): UserGameSessionModel
   def lastError: Int
 }
 
@@ -145,7 +146,7 @@ class UserGameSessionDAO (implicit inj: Injector) extends UserGameSession with I
       val row: Row = result.one()
       if (row != null) {
         val cat: UserGameSessionModel = new UserGameSessionModel(row.getString("uid"),
-                                                                 row.getSet("game_session_ids", classOf[Integer]).toList.map(i => i * 1))
+                                                                 row.getSet("game_session_ids", classOf[String]).toList.map(ii => ii.asInstanceOf[String] ))
         cat
       } else {
         null

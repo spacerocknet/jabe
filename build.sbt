@@ -11,4 +11,7 @@ libraryDependencies ++= Seq(
    "junit" % "junit" % "4.8.1" % "test"
 )
 
+testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-q")
+//javaOptions in Test += "-Dlogger.file=conf/test-logger.xml"
+
 playScalaSettings

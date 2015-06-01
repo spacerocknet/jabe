@@ -25,7 +25,10 @@ class UserModule extends Module {
   bind [UidBlock] to new UidBlockDAO
   bind [UserData] to new UserDataDAO
   bind [ServerInfo] to new ServerInfoDAO
-
+  bind [GameSession] to new GameSessionDAO
+  bind [OpenGameSession] to new OpenGameSessionDAO
+  bind [UserGameSession] to new UserGameSessionDAO
+  
   // cache
   bind [RedisWrapper] to new RedisWrapperDAO
   bind [IdGenerator] to new UidGenerator

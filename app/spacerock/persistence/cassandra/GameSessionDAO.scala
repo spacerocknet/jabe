@@ -15,9 +15,10 @@ import spacerock.constants.Constants
 trait GameSession {
   def getGameSessionById(gameSessionId: String): GameSessionModel
   def addNewGameSession(gameSessionId: String, uid1: String): Boolean
-  def updateGameSessionOnOpponent(gameSessionId: String, uid2: String): Boolean
-  def updateGameSession(gameSessionId: String, uid: String, puzzlePieces: Int): Boolean
-
+  //def updateGameSessionOnOpponent(gameSessionId: String, uid2: String): Boolean
+  def updateGameSessionOnPlayer(gameSessionId: String, uid: String, puzzlePieces: Int, changeTurn : Boolean): Boolean
+  def updateGameSessionState(gameSessionId: String, state: Int): Boolean
+  def removeGameSession(gameSessionId: String): Boolean
   def lastError: Int
 }
 
@@ -64,23 +65,61 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
 
 
   /**
-   * Update category with game id list and description
-   * @param category
-   * @param gameId
-   * @param description
+   * Update game_session by game_session_id and uid 
+   * @param gameSessionId
+   * @param uid
+   * @param puzzlePieces
+   * @param changeTurn
    * @return true if update successfully, false otherwise
    */
-  override def updateGameSessionOnOpponent(gameSessionId: String, uid2: String): Boolean = {
-    val ps: PreparedStatement = pStatements.getOrElse("UpdateOpponent", null)
-    if (ps == null || !sessionManager.connected) {
-      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
-      Logger.error("Cannot connect to database")
-      return false
+  override def updateGameSessionOnPlayer(gameSessionId: String, uid: String, puzzlePieces: Int, changeTurn : Boolean): Boolean = {
+    val gameSession = getGameSessionById(gameSessionId)
+    if (gameSession == null) {
+         return false
     }
-    val bs: BoundStatement = new BoundStatement(ps)
-
-    //TODOs: find the row first and the update
-
+    
+    var ps: PreparedStatement = null
+    var bs: BoundStatement = null
+    if (gameSession.uid1 == uid) {
+       ps = pStatements.getOrElse("UpdateGameSessionPlayer1", null)    
+       if (ps == null || !sessionManager.connected) {
+          _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
+          Logger.error("Cannot connect to database")
+          return false
+       }
+       bs = new BoundStatement(ps)
+       bs.setString(0, uid)
+       bs.setInt(1, puzzlePieces)
+       bs.setLong(2, System.currentTimeMillis())
+       bs.setInt(3, gameSession.currentRound + 1)
+       
+       if (changeTurn)
+          bs.setInt(4, 2)
+       else 
+          bs.setInt(4, 1)
+          
+       bs.setString(5, gameSessionId)
+    } else {
+       ps = pStatements.getOrElse("UpdateGameSessionPlayer2", null) 
+       if (ps == null || !sessionManager.connected) {
+          _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
+          Logger.error("Cannot connect to database")
+          return false
+       }
+       bs = new BoundStatement(ps)
+       bs.setString(0, uid)
+       bs.setInt(1, puzzlePieces)
+       bs.setLong(2, System.currentTimeMillis())
+       bs.setInt(3, gameSession.currentRound + 1)
+       if (changeTurn)
+          bs.setInt(4, 1)
+       else 
+          bs.setInt(4, 2)
+          
+       bs.setString(5, gameSessionId)
+       
+    }
+   
     if (sessionManager.execute(bs) == null) {
       _lastError = sessionManager.lastError
       false
@@ -91,14 +130,39 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
   }
 
 
+  /**
+   * Update game_session's sate
+   * @param state
+   * @param gameId
+   * @return true if update successfully, false otherwise
+   */
+   def updateGameSessionState(gameSessionId: String, state: Int): Boolean = {
+     val ps: PreparedStatement = pStatements.getOrElse("UpdateGameSessionState", null)
+     if (ps == null || !sessionManager.connected) {
+       _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
+       Logger.error("Cannot connect to database")
+       return false
+     }
+     val bs: BoundStatement = new BoundStatement(ps)
 
+     bs.setString("game_session_id", gameSessionId)
+     bs.setInt("state", state)
+
+     if (sessionManager.execute(bs) == null) {
+       _lastError = sessionManager.lastError
+       false
+     } else {
+       _lastError = Constants.ErrorCode.ERROR_SUCCESS
+       true
+     }
+  }
 
   
     /**
    * Get all categories from system for a specified game id
    * @return list of categories
    */
-   def getGameSessionById(gameSessionId: String): GameSessionModel = {
+   override def getGameSessionById(gameSessionId: String): GameSessionModel = {
     //TODOs: filtering out game id from the results
     val ps: PreparedStatement = pStatements.getOrElse("GetGameSessionById", null)
     if (ps == null || !sessionManager.connected) {
@@ -107,51 +171,89 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
       return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
+    bs.setString(0, gameSessionId)
+
     val result: ResultSet = sessionManager.execute(bs)
     if (result == null) {
       _lastError = sessionManager.lastError
       null
     } else {
-      val r : Row = result.one()
-      
-      if (r != null) {
+      for (r: Row <- result.all()) {
+        if (r != null) {
           return new GameSessionModel(r.getString("game_session_id"),
                                      r.getInt("state"),
-                                     r.getString("uid1"),
+                                     r.getString("uid_1"),
                                      r.getInt("puzzle_pieces_1"),
                                      r.getLong("uid_1_last_move"),
-                                     r.getString("uid2"),
+                                     r.getString("uid_2"),
                                      r.getInt("puzzle_pieces_2"),
                                      r.getLong("uid_2_last_move"),
                                      r.getInt("current_turn"),
                                      r.getInt("current_round"))
-                       
-        
-      } 
+        }
+      }
       
       null
     }
   }
 
+   
+   
+   /**
+   * Remove a game_session_id from a row in game_sessions
+   * @param uid
+   * @param gameSessionId
+   * @return true if update successfully, false otherwise
+   */
+  override def removeGameSession(gameSessionId: String): Boolean = {
+    val ps: PreparedStatement = pStatements.getOrElse("DeleteGameSessionById", null)
+    if (ps == null || !sessionManager.connected) {
+      _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
+      Logger.error("Cannot connect to database")
+      return false
+    }
+    
+    val bs: BoundStatement = new BoundStatement(ps)
+    bs.setString("game_session_id", gameSessionId)
+
+    if (sessionManager.execute(bs) == null) {
+      _lastError = sessionManager.lastError
+      false
+    } else {
+      _lastError = Constants.ErrorCode.ERROR_SUCCESS
+      true
+    }
+  } 
 
   def init() = {
     _lastError = Constants.ErrorCode.ERROR_SUCCESS
-    // update category
-    var ps: PreparedStatement = sessionManager.prepare("UPDATE spacerock.UpdateOpponent SET uid_2 = ?, puzzle_pieces_2 = ?, uid_2_last_move = ?, current_turn = 2, current_round = current_round + 1 " +
-                                                       "where game_session_id = ?;")
-    if (ps != null)
-      pStatements.put("UpdateOpponent", ps)
-    else
-      _lastError = sessionManager.lastError
 
-    ps = sessionManager.prepare("UPDATE spacerock.UpdateOpponent SET uid_1 = ?, puzzle_pieces_1 = ?, uid_1_last_move = ?, current_turn = 1, current_round = current_round + 1 " +
+    //update game_session on the player 1
+    var ps: PreparedStatement = sessionManager.prepare("UPDATE spacerock.game_sessions SET uid_1 = ?, puzzle_pieces_1 = ?, uid_1_last_move = ?, current_round = ?, current_turn = ?  " +
                                 "where game_session_id = ?;")
     if (ps != null)
-      pStatements.put("UpdateInitiator", ps)
+      pStatements.put("UpdateGameSessionPlayer1", ps)
     else
       _lastError = sessionManager.lastError
 
-    // Add new category
+    // update game_session on the player 2
+    ps = sessionManager.prepare("UPDATE spacerock.game_sessions SET uid_2 = ?, puzzle_pieces_2 = ?, uid_2_last_move = ?, current_round = ?, current_turn = ? " +
+                                                       "where game_session_id = ?;")
+    if (ps != null)
+      pStatements.put("UpdateGameSessionPlayer2", ps)
+    else
+      _lastError = sessionManager.lastError
+      
+      
+    //update game_session's state
+    ps = sessionManager.prepare("UPDATE spacerock.game_sessions SET state = ? where game_session_id = ?;")
+    if (ps != null)
+      pStatements.put("UpdateGameSessionState", ps)
+    else
+      _lastError = sessionManager.lastError
+      
+      
+    // Add new game_session
     ps = sessionManager.prepare("INSERT INTO spacerock.game_sessions (game_session_id, uid_1, puzzle_pieces_1, uid_1_last_move, current_turn, current_round) " +
                                 " VALUES (?, ?, ?, ?, ?, ?) IF NOT EXISTS;")
     if (ps != null)
@@ -159,13 +261,20 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
     else
       _lastError = sessionManager.lastError
 
-    // Get category info
+    // Get game_session info
     ps = sessionManager.prepare("SELECT * from spacerock.game_sessions where game_session_id = ?;")
     if (ps != null)
       pStatements.put("GetGameSessionById", ps)
     else
       _lastError = sessionManager.lastError
 
+    //delete a game_session
+    ps = sessionManager.prepare("DELETE from spacerock.game_sessions where game_session_id = ?;")
+    if (ps != null)
+      pStatements.put("DeleteGameSessionById", ps)
+    else
+      _lastError = sessionManager.lastError
+      
   }
 
 }

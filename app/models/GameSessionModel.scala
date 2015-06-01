@@ -8,7 +8,7 @@ case class GameSessionModel (gameSessionId: String, state: Int,
   final val fmt =
     """
       |{
-      |"game_session_id" : %d,
+      |"game_session_id" : %s,
       |"state" : "%s",
       |"uid_1" : "%s",
       |"puzzle_pieces_1" : %d,
