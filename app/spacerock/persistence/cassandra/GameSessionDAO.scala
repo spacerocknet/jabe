@@ -196,7 +196,6 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
       null
     }
   }
-
    
    
    /**
@@ -264,10 +263,10 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
     // Get game_session info
     ps = sessionManager.prepare("SELECT * from spacerock.game_sessions where game_session_id = ?;")
     if (ps != null)
-      pStatements.put("GetGameSessionById", ps)
+      pStatements.put("GetGameSessions", ps)
     else
       _lastError = sessionManager.lastError
-
+      
     //delete a game_session
     ps = sessionManager.prepare("DELETE from spacerock.game_sessions where game_session_id = ?;")
     if (ps != null)

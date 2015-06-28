@@ -4,6 +4,9 @@
 #---------------------------------------------------------------------------------------------
 # Home page
 GET         /                                 @controllers.Application.index
+GET         /init                             @controllers.Application.init
+GET         /testtakeone                       @controllers.Application.testTakeOne
+
 #---------------------------------------------------------------------------------------------
 # Game
 POST        /v1/game/add                      @controllers.GameController.addNewGameInfo
