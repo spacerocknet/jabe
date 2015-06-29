@@ -12,4 +12,5 @@ class WebModule extends Module {
   binding to new QuizController
   binding to new SkuController
   binding to new UserController
+  binding to new GameSessionController
 }

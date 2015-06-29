@@ -18,10 +18,10 @@ class GameSessionScanner(implicit inj: Injector) extends Runnable with Injectabl
 		//}
 		Logger.info("Running GameSessionService ...")
     if (!init) {
-        openGameSessionDao.addNewOpenGameSession("opengamesession_1")
-        openGameSessionDao.addNewOpenGameSession("opengamesession_2")
-        openGameSessionDao.addNewOpenGameSession("opengamesession_3")
-        openGameSessionDao.addNewOpenGameSession("opengamesession_4")
+        //openGameSessionDao.addNewOpenGameSession("opengamesession_1")
+        //openGameSessionDao.addNewOpenGameSession("opengamesession_2")
+        //openGameSessionDao.addNewOpenGameSession("opengamesession_3")
+        //openGameSessionDao.addNewOpenGameSession("opengamesession_4")
         init = true
     }
     

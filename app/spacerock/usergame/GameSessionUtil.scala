@@ -19,6 +19,21 @@ object GameSessionUtil {
       return openGameSession
    }
    
+   //only look at the 1st item - if that is the same user's gameSession, we stop and return -1 
+   def takeAnOpenGameSession(uid : String) : OpenGameSessionModel = {
+       var openGameSession : OpenGameSessionModel = openGameSessionQueue.peek()
+       if (openGameSession == null)
+         return new OpenGameSessionModel("-1")
+       if (openGameSession.gameSessionId.indexOf(uid) != -1) {
+          return new OpenGameSessionModel("-2")
+       } else {
+          openGameSessionQueue.take()
+          deletedGameSessionQueue.put(openGameSession)
+       }
+      
+       openGameSession
+   }
+   
    //provided that the input openGameSession is already in Cassandra
    def addAnOpenGameSession(openGameSession : OpenGameSessionModel) = {
       openGameSessionQueue.put(openGameSession)

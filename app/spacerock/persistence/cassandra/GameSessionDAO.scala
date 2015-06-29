@@ -14,9 +14,9 @@ import spacerock.constants.Constants
 
 trait GameSession {
   def getGameSessionById(gameSessionId: String): GameSessionModel
-  def addNewGameSession(gameSessionId: String, uid1: String): Boolean
+  def addNewGameSession(gameSessionId: String, uid1: String): GameSessionModel
   //def updateGameSessionOnOpponent(gameSessionId: String, uid2: String): Boolean
-  def updateGameSessionOnPlayer(gameSessionId: String, uid: String, puzzlePieces: Int, changeTurn : Boolean): Boolean
+  def updateGameSessionOnPlayer(gameSessionId: String, uid: String, puzzlePieces: Int, changeTurn : Boolean): GameSessionModel
   def updateGameSessionState(gameSessionId: String, state: Int): Boolean
   def removeGameSession(gameSessionId: String): Boolean
   def lastError: Int
@@ -39,27 +39,31 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
    * @param gameSessionId and a uid
    * @return true if success, false otherwise
    */
-  override def addNewGameSession(gameSessionId: String, uid1: String): Boolean = {
+  override def addNewGameSession(gameSessionId: String, uid1: String): GameSessionModel = {
     val ps: PreparedStatement = pStatements.getOrElse("AddGameSession", null)
     if (ps == null || !sessionManager.connected) {
       _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
       Logger.error("Cannot connect to database")
-      return false
+      return null
     }
     val bs: BoundStatement = new BoundStatement(ps)
+    val ts = System.currentTimeMillis()
     bs.setString("game_session_id", gameSessionId)
     bs.setString("uid_1", uid1)
     bs.setInt("puzzle_pieces_1", 1000000000)
-    bs.setLong("uid_1_last_move", System.currentTimeMillis())
+    bs.setLong("uid_1_last_move", ts)
     bs.setInt("current_turn", 1);
     bs.setInt("current_round", 0)
     
     if (sessionManager.execute(bs) == null) {
       _lastError = sessionManager.lastError
-      false
+      return null
     } else {
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
-      true
+      return new GameSessionModel(gameSessionId, 0, 
+                                  uid1, 1000000000, ts,
+                                  "", 1000000000, ts-1,
+                                  1, 0)
     }
   }
 
@@ -72,10 +76,11 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
    * @param changeTurn
    * @return true if update successfully, false otherwise
    */
-  override def updateGameSessionOnPlayer(gameSessionId: String, uid: String, puzzlePieces: Int, changeTurn : Boolean): Boolean = {
+  override def updateGameSessionOnPlayer(gameSessionId: String, uid: String, puzzlePieces: Int, changeTurn : Boolean): GameSessionModel = {
     val gameSession = getGameSessionById(gameSessionId)
     if (gameSession == null) {
-         return false
+         Logger.info("Unable to find gameSessionId: " + gameSessionId + " in game_sessions!!!")
+         return null
     }
     
     var ps: PreparedStatement = null
@@ -85,53 +90,70 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
        if (ps == null || !sessionManager.connected) {
           _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
           Logger.error("Cannot connect to database")
-          return false
+          return null
        }
+       val lastMove : Long = System.currentTimeMillis()
        bs = new BoundStatement(ps)
        bs.setString(0, uid)
        bs.setInt(1, puzzlePieces)
-       bs.setLong(2, System.currentTimeMillis())
+       bs.setLong(2, lastMove)
        bs.setInt(3, gameSession.currentRound + 1)
        
-       if (changeTurn)
+       if (changeTurn) {
           bs.setInt(4, 2)
-       else 
+          gameSession.currentTurn = 2
+       } else { 
           bs.setInt(4, 1)
-          
+          gameSession.currentTurn = 1
+       }
+       
        bs.setString(5, gameSessionId)
+       
+       gameSession.uid1 = uid
+       gameSession.puzzlePieces1 = puzzlePieces
+       gameSession.uid1LastMove = lastMove
+       gameSession.currentRound = gameSession.currentRound + 1
+       
     } else {
        ps = pStatements.getOrElse("UpdateGameSessionPlayer2", null) 
        if (ps == null || !sessionManager.connected) {
           _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
           Logger.error("Cannot connect to database")
-          return false
+          return null
        }
+       val lastMove = System.currentTimeMillis()
        bs = new BoundStatement(ps)
        bs.setString(0, uid)
        bs.setInt(1, puzzlePieces)
-       bs.setLong(2, System.currentTimeMillis())
+       bs.setLong(2, lastMove)
        bs.setInt(3, gameSession.currentRound + 1)
-       if (changeTurn)
+       if (changeTurn) {
           bs.setInt(4, 1)
-       else 
+          gameSession.currentTurn = 1
+       } else  {
           bs.setInt(4, 2)
-          
+          gameSession.currentTurn = 2
+       }   
        bs.setString(5, gameSessionId)
        
+       gameSession.uid2 = uid
+       gameSession.puzzlePieces2 = puzzlePieces
+       gameSession.uid2LastMove = lastMove
+       gameSession.currentRound = gameSession.currentRound + 1
     }
    
     if (sessionManager.execute(bs) == null) {
       _lastError = sessionManager.lastError
-      false
+      null
     } else {
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
-      true
+      return gameSession
     }
   }
 
 
   /**
-   * Update game_session's sate
+   * Update game_session's state
    * @param state
    * @param gameId
    * @return true if update successfully, false otherwise
@@ -254,7 +276,7 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
       
     // Add new game_session
     ps = sessionManager.prepare("INSERT INTO spacerock.game_sessions (game_session_id, uid_1, puzzle_pieces_1, uid_1_last_move, current_turn, current_round) " +
-                                " VALUES (?, ?, ?, ?, ?, ?) IF NOT EXISTS;")
+                                " VALUES (?, ?, ?, ?, ?, ?);")
     if (ps != null)
       pStatements.put("AddGameSession", ps)
     else
@@ -263,7 +285,7 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
     // Get game_session info
     ps = sessionManager.prepare("SELECT * from spacerock.game_sessions where game_session_id = ?;")
     if (ps != null)
-      pStatements.put("GetGameSessions", ps)
+      pStatements.put("GetGameSessionById", ps)
     else
       _lastError = sessionManager.lastError
       
