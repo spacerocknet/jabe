@@ -14,6 +14,7 @@ import spacerock.constants.Constants
 
 trait GameSession {
   def getGameSessionById(gameSessionId: String): GameSessionModel
+  def getGameSessionsByIds(gameSessionIds : List[String]): List[GameSessionModel] 
   def addNewGameSession(gameSessionId: String, uid1: String): GameSessionModel
   //def updateGameSessionOnOpponent(gameSessionId: String, uid2: String): Boolean
   def updateGameSessionOnPlayer(gameSessionId: String, uid: String, puzzlePieces: Int, changeTurn : Boolean): GameSessionModel
@@ -177,6 +178,11 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
        _lastError = Constants.ErrorCode.ERROR_SUCCESS
        true
      }
+     
+     //val batchSt: BatchStatement = new BatchStatement()
+     //batchSt.add(bs)
+     //sessionManager.execute(batchSt)
+     //true
   }
 
   
@@ -219,6 +225,39 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
     }
   }
    
+   
+   def getGameSessionsByIds(gameSessionIds : List[String]): List[GameSessionModel] = {
+       val ps: PreparedStatement = pStatements.getOrElse("GetGameSessionById", null)
+       if (ps == null || !sessionManager.connected) {
+          _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
+           Logger.error("Cannot connect to database")
+           return null
+       }
+       
+       val retVal: scala.collection.mutable.ListBuffer[GameSessionModel] = scala.collection.mutable.ListBuffer()
+        
+       for(gameSessionId <- gameSessionIds) {
+         val bs: BoundStatement = new BoundStatement(ps)
+         bs.setString(0, gameSessionId)
+                
+         val result: ResultSet = sessionManager.execute(bs)
+
+         for (r: Row <- result.all()) {
+             retVal.add(new GameSessionModel(r.getString("game_session_id"),
+                                     r.getInt("state"),
+                                     r.getString("uid_1"),
+                                     r.getInt("puzzle_pieces_1"),
+                                     r.getLong("uid_1_last_move"),
+                                     r.getString("uid_2"),
+                                     r.getInt("puzzle_pieces_2"),
+                                     r.getLong("uid_2_last_move"),
+                                     r.getInt("current_turn"),
+                                     r.getInt("current_round")))
+         }
+      }
+       
+      return retVal.toList 
+   }
    
    /**
    * Remove a game_session_id from a row in game_sessions

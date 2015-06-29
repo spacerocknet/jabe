@@ -27,4 +27,8 @@ case class GameSessionModel (gameSessionId: String, var state: Int,
                uid2, puzzlePieces2, uid2LastMove, 
                currentTurn, currentRound)
   }
+  
+  def clean() = {
+     uid2 = if (uid2 == null) "null" else uid2
+  }
 }

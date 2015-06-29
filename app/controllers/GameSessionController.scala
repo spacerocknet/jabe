@@ -12,6 +12,7 @@ import spacerock.persistence.cassandra.OpenGameSession
 import spacerock.persistence.cassandra.UserGameSession
 import spacerock.usergame.GameSessionUtil
 import spacerock.utils.StaticVariables
+import spacerock.constants
 
 class GameSessionController (implicit inj: Injector) extends Controller with Injectable {
 
@@ -25,7 +26,7 @@ class GameSessionController (implicit inj: Injector) extends Controller with Inj
   /**
    *  Create a new game session or join an existing game session
     * @param uid : user id
-   * @return json of user game session.
+   * @return json of a user game session.
    */
   //TODOS: take care of error cases
   def createOrJoinAGameSession = Action {  request =>
@@ -65,5 +66,95 @@ class GameSessionController (implicit inj: Injector) extends Controller with Inj
       
   }
 
+  def updateGameSession = Action {  request =>
+      val json: Option[JsValue] = request.body.asJson
+      val uid = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")
+      val gameSessionId = (json.getOrElse(null) \ "game_session_id").asOpt[String].getOrElse("")
+      val puzzlePieces = (json.getOrElse(null) \ "puzzle_pieces").asOpt[Int].getOrElse(0)
+      val changeTurn = (json.getOrElse(null) \ "change_turn").asOpt[Boolean].getOrElse(false)
+      Logger.info("Received uid : " + uid)
+      Logger.info("Received gameSessionId : " + gameSessionId)
+      Logger.info("Received puzzlePieces : " + puzzlePieces)
+      Logger.info("Received changeTurn : " + changeTurn)
+      
+      var retObj: JsObject = StaticVariables.OkStatus
+
+      try {
+         gameSessionDao.updateGameSessionOnPlayer(gameSessionId, uid, puzzlePieces, changeTurn)
+      } catch {
+        case e: Exception => {
+           Logger.error("exception = %s" format e)
+           retObj = StaticVariables.BackendErrorStatus
+        }
+      }
+       
+      Ok(retObj)
+       
+  }
+  
+  def updateGameSessionState = Action { request =>
+      val json: Option[JsValue] = request.body.asJson
+      val gameSessionId = (json.getOrElse(null) \ "game_session_id").asOpt[String].getOrElse("")
+      val gameState = (json.getOrElse(null) \ "state").asOpt[Int].getOrElse(0)
+      
+      Logger.info("Received gameSessionId : " + gameSessionId)
+      Logger.info("Received gameState : " + gameState)
+      
+      var retObj: JsObject = StaticVariables.OkStatus
+
+      try {
+        gameSessionDao.updateGameSessionState(gameSessionId, gameState)
+      } catch {
+        case e: Exception => {
+           Logger.error("exception = %s" format e)
+           retObj = StaticVariables.BackendErrorStatus
+        }
+      }
+       
+      Ok(retObj)
+  }
+  
+  def getGameSessionsByUid = Action { request =>
+      val json: Option[JsValue] = request.body.asJson
+      val uid = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse("")
+      Logger.info("Received uid : " + uid)
+      
+      var retObj: JsObject = StaticVariables.OkStatus
+      try {
+         val userGameSessionModel = userGameSessionDao.getUserGameSessionsByUid(uid)
+         val gameSessions : List[GameSessionModel] = gameSessionDao.getGameSessionsByIds(userGameSessionModel.gameSessionIds)
+         if (gameSessions != null) {
+            //retObj = JsArray(Json.toJson(retVal))
+           var seq = Seq[JsObject]()
+           
+           for(gameSession : GameSessionModel <- gameSessions) {
+               gameSession.clean()
+               val jsonObj = Json.obj("game_session_id" -> gameSession.gameSessionId,
+                                 "state" -> gameSession.state,
+                                 "uid_1" -> gameSession.uid1,
+                                 "puzzle_pieces_1" -> gameSession.puzzlePieces1,
+                                 "uid_1_last_move" -> gameSession.uid1LastMove,
+                                 "uid_2" -> gameSession.uid2,
+                                 "puzzle_pieces_2" -> gameSession.puzzlePieces2,
+                                 "uid_2_last_move" -> gameSession.uid2LastMove,
+                                 "current_turn" -> gameSession.currentTurn,
+                                 "current_round" -> gameSession.currentRound
+                                 )
+               seq = seq:+ jsonObj
+           }
+
+           retObj = Json.obj("game_sessions" -> JsArray(seq))
+         }
+        
+      } catch {
+        case e: Exception => {
+           Logger.error("exception = %s" format e)
+           retObj = StaticVariables.BackendErrorStatus
+          
+        }
+      }
+       
+       Ok(retObj)
+  }
  
 }

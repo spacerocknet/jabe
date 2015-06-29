@@ -39,8 +39,10 @@ POST        /v1/quiz/add                      @controllers.QuizController.addNew
 
 #---------------------------------------------------------------------------------------------
 # GameSession
-POST        /v1/gamesession/createorjoin      @controllers.GameSessionController.createOrJoinAGameSession
-
+POST        /v1/gamesession/createorjoin             @controllers.GameSessionController.createOrJoinAGameSession
+POST        /v1/gamesession/updategamesession        @controllers.GameSessionController.updateGameSession
+POST        /v1/gamesession/updategamesessionstate   @controllers.GameSessionController.updateGameSessionState
+POST        /v1/gamesession/getgamesessions          @controllers.GameSessionController.getGameSessionsByUid
 
 #---------------------------------------------------------------------------------------------
 # sku
