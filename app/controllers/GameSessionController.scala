@@ -14,6 +14,8 @@ import spacerock.usergame.GameSessionUtil
 import spacerock.utils.StaticVariables
 import spacerock.constants
 
+import scala.collection.JavaConversions._
+
 class GameSessionController (implicit inj: Injector) extends Controller with Injectable {
 
   val openGameSessionDao = inject[OpenGameSession]
@@ -21,7 +23,7 @@ class GameSessionController (implicit inj: Injector) extends Controller with Inj
   val userGameSessionDao = inject[UserGameSession]
   
   implicit val gameSessionFmt = Json.format[GameSessionModel]
-
+  //implicit val gameSessionMapFmt = Json.format[Map[String, String]]
 
   /**
    *  Create a new game session or join an existing game session
@@ -96,14 +98,21 @@ class GameSessionController (implicit inj: Injector) extends Controller with Inj
       val json: Option[JsValue] = request.body.asJson
       val gameSessionId = (json.getOrElse(null) \ "game_session_id").asOpt[String].getOrElse("")
       val gameState = (json.getOrElse(null) \ "state").asOpt[Int].getOrElse(0)
+      val gameSessionAttrs = (json.getOrElse(null) \ "attributes").asOpt[JsObject].getOrElse(null)
       
       Logger.info("Received gameSessionId : " + gameSessionId)
       Logger.info("Received gameState : " + gameState)
+      Logger.info("Received attributes: " + gameSessionAttrs)
+      var map = Map[String, String]()
+      if (gameSessionAttrs != null) {
+        gameSessionAttrs.fields.foreach( (field) =>  map += (field._1 -> field._2.toString))                                  
+      }
       
+      //Logger.info("map : " + map.toString())
       var retObj: JsObject = StaticVariables.OkStatus
 
       try {
-        gameSessionDao.updateGameSessionState(gameSessionId, gameState)
+        gameSessionDao.updateGameSessionState(gameSessionId, gameState, map)
       } catch {
         case e: Exception => {
            Logger.error("exception = %s" format e)
@@ -125,10 +134,11 @@ class GameSessionController (implicit inj: Injector) extends Controller with Inj
          val gameSessions : List[GameSessionModel] = gameSessionDao.getGameSessionsByIds(userGameSessionModel.gameSessionIds)
          if (gameSessions != null) {
             //retObj = JsArray(Json.toJson(retVal))
-           var seq = Seq[JsObject]()
+           var seq = Seq[JsValue]()
            
            for(gameSession : GameSessionModel <- gameSessions) {
                gameSession.clean()
+               /*
                val jsonObj = Json.obj("game_session_id" -> gameSession.gameSessionId,
                                  "state" -> gameSession.state,
                                  "uid_1" -> gameSession.uid1,
@@ -140,6 +150,10 @@ class GameSessionController (implicit inj: Injector) extends Controller with Inj
                                  "current_turn" -> gameSession.currentTurn,
                                  "current_round" -> gameSession.currentRound
                                  )
+                                 
+                                 */
+               val jsonObj = Json.toJson(gameSession)
+               //Logger.info("JsonObject: " + jsonObj)
                seq = seq:+ jsonObj
            }
 

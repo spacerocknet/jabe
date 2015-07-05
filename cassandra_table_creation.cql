@@ -533,6 +533,7 @@ CREATE TABLE IF NOT EXISTS spacerock.game_sessions (
 	uid_2_last_move bigint,
 	current_turn int,
 	current_round int,
+	attributes map<text, text>,
 	PRIMARY KEY (game_session_id)
 ) WITH
 read_repair_chance = 0.1

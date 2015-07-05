@@ -1,10 +1,14 @@
 package models
 
+import scala.collection.JavaConversions._
+import play.api.libs.json.Json
+
+ 
 
 case class GameSessionModel (gameSessionId: String, var state: Int, 
                              var uid1: String, var puzzlePieces1: Int, var uid1LastMove: Long,
                              var uid2: String, var puzzlePieces2: Int, var uid2LastMove: Long,
-                             var currentTurn: Int, var currentRound: Int) {
+                             var currentTurn: Int, var currentRound: Int, attributes: Map[String, String]) {
   final val fmt =
     """
       |{
@@ -17,15 +21,27 @@ case class GameSessionModel (gameSessionId: String, var state: Int,
       |"puzzle_pieces_2" : %d,
       |"uid_2_last_move" : %d,
       |"current_turn" : %d,
-      |"current_round": %d
-      |}
+      |"current_round": %d,
+      |"attributes": %s}
     """.stripMargin
 
   override def toString(): String = {
+    /*
+    var sb : StringBuilder = new StringBuilder
+    sb.append("{")
+    attributes.foreach {case(key, value) => sb.append("\"" + key + ":" + value + "\"")}
+    
+    sb.append("}")
+    */
+    
+    //var map = Map[String, String]()
+    
+    //attributes.foreach {case(key, value) => map += (key -> value)}
+    
     fmt.format(gameSessionId, state, 
                uid1, puzzlePieces1, uid1LastMove, 
                uid2, puzzlePieces2, uid2LastMove, 
-               currentTurn, currentRound)
+               currentTurn, currentRound, Json.toJson(attributes) )
   }
   
   def clean() = {

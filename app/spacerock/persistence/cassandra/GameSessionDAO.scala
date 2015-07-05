@@ -2,14 +2,13 @@ package spacerock.persistence.cassandra
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
-
 import com.datastax.driver.core._
-
 import models.GameSessionModel
 import play.Logger
 import scaldi.Injectable
 import scaldi.Injector
 import spacerock.constants.Constants
+import java.util.HashMap
 
 
 trait GameSession {
@@ -18,7 +17,7 @@ trait GameSession {
   def addNewGameSession(gameSessionId: String, uid1: String): GameSessionModel
   //def updateGameSessionOnOpponent(gameSessionId: String, uid2: String): Boolean
   def updateGameSessionOnPlayer(gameSessionId: String, uid: String, puzzlePieces: Int, changeTurn : Boolean): GameSessionModel
-  def updateGameSessionState(gameSessionId: String, state: Int): Boolean
+  def updateGameSessionState(gameSessionId: String, state: Int, map : Map[String, String]): Boolean
   def removeGameSession(gameSessionId: String): Boolean
   def lastError: Int
 }
@@ -64,7 +63,7 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
       return new GameSessionModel(gameSessionId, 0, 
                                   uid1, 1000000000, ts,
                                   "", 1000000000, ts-1,
-                                  1, 0)
+                                  1, 0, Map[String, String]())
     }
   }
 
@@ -159,7 +158,7 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
    * @param gameId
    * @return true if update successfully, false otherwise
    */
-   def updateGameSessionState(gameSessionId: String, state: Int): Boolean = {
+   def updateGameSessionState(gameSessionId: String, state: Int, map : Map[String, String]): Boolean = {
      val ps: PreparedStatement = pStatements.getOrElse("UpdateGameSessionState", null)
      if (ps == null || !sessionManager.connected) {
        _lastError = Constants.ErrorCode.CassandraDb.ERROR_CAS_NOT_INITIALIZED
@@ -170,6 +169,7 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
 
      bs.setString("game_session_id", gameSessionId)
      bs.setInt("state", state)
+     bs.setMap("attributes", map)
 
      if (sessionManager.execute(bs) == null) {
        _lastError = sessionManager.lastError
@@ -208,6 +208,10 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
     } else {
       for (r: Row <- result.all()) {
         if (r != null) {
+          var map : Map[String, String] = Map[String, String]()
+          val retMap = r.getMap("attributes", classOf[String], classOf[String])
+          retMap.foreach {case(key, value) => map += (key -> value)}
+          
           return new GameSessionModel(r.getString("game_session_id"),
                                      r.getInt("state"),
                                      r.getString("uid_1"),
@@ -217,7 +221,8 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
                                      r.getInt("puzzle_pieces_2"),
                                      r.getLong("uid_2_last_move"),
                                      r.getInt("current_turn"),
-                                     r.getInt("current_round"))
+                                     r.getInt("current_round"),
+                                     map)
         }
       }
       
@@ -243,6 +248,12 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
          val result: ResultSet = sessionManager.execute(bs)
 
          for (r: Row <- result.all()) {
+             var map : Map[String, String] = Map[String, String]()
+             val retMap = r.getMap("attributes", classOf[String], classOf[String])
+             //retMap.foreach {case(key, value) => map += (key -> value)}
+             retMap.map{ case(key, value) => map += (key -> value) }
+                       
+             Logger.info(retMap.toString())
              retVal.add(new GameSessionModel(r.getString("game_session_id"),
                                      r.getInt("state"),
                                      r.getString("uid_1"),
@@ -252,7 +263,8 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
                                      r.getInt("puzzle_pieces_2"),
                                      r.getLong("uid_2_last_move"),
                                      r.getInt("current_turn"),
-                                     r.getInt("current_round")))
+                                     r.getInt("current_round"),
+                                     map))
          }
       }
        
@@ -306,7 +318,7 @@ class GameSessionDAO (implicit inj: Injector) extends GameSession with Injectabl
       
       
     //update game_session's state
-    ps = sessionManager.prepare("UPDATE spacerock.game_sessions SET state = ? where game_session_id = ?;")
+    ps = sessionManager.prepare("UPDATE spacerock.game_sessions SET state = ?, attributes = ? where game_session_id = ?;")
     if (ps != null)
       pStatements.put("UpdateGameSessionState", ps)
     else
