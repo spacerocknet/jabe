@@ -110,34 +110,63 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
     }
 	}
 
+
+  /**
+   * Del all users of system
+   * @return
+   */
+  def delAllUser = Action {
+    userDao.delAllUsers
+
+    Ok(Json.obj("status" -> 1))
+
+  }
+
+
   /**
    * Get user by uid.
    * @param uid user id
    * @return subscriber info if success, empty json object or bad request otherwise.
    */
-  def getUserInfoByUID (uid: String) = Action {
+  def getUserInfoByUID = Action { request =>
     try {
-      val subscriber: SubscriberModel = userDao.getInfoByUID(uid)
-      if (subscriber != null) {
-        val userString = Json.obj(
-          "uid" -> (if (subscriber.uid == null) "" else subscriber.uid),
-          "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
-          "os" -> (if (subscriber.os == null) "" else subscriber.os),
-          "model" -> (if (subscriber.model == null) "" else subscriber.model),
-          "phone" -> (if (subscriber.phone == null) "" else subscriber.phone),
-          "email" -> (if (subscriber.email == null) "" else subscriber.email),
-          "fb_id" -> (if (subscriber.fbId == null) "" else subscriber.fbId),
-          "state" -> (if (subscriber.state == null) "" else subscriber.state),
-          "region" -> (if (subscriber.region == null) "" else subscriber.region),
-          "country" -> (if (subscriber.country == null) "" else subscriber.country),
-          "apps" -> (if (subscriber.apps == null) "" else subscriber.apps))
-        Ok(userString)
+      val json: Option[JsValue] = request.body.asJson
+
+      val uid = (json.getOrElse(null) \ "uid").asOpt[String].getOrElse(null)
+      if (uid != null) {
+        Logger.info("in here 1")
+        val subscriber: SubscriberModel = userDao.getInfoByUID(uid)
+        if (subscriber != null) {
+          Logger.info("in here 2")
+          val userString = Json.obj(
+            "uid" -> (if (subscriber.uid == null) "" else subscriber.uid),
+            "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
+            "os" -> (if (subscriber.os == null) "" else subscriber.os),
+            "model" -> (if (subscriber.model == null) "" else subscriber.model),
+            "phone" -> (if (subscriber.phone == null) "" else subscriber.phone),
+            "email" -> (if (subscriber.email == null) "" else subscriber.email),
+            "fb_id" -> (if (subscriber.fbId == null) "" else subscriber.fbId),
+            "state" -> (if (subscriber.state == null) "" else subscriber.state),
+            "region" -> (if (subscriber.region == null) "" else subscriber.region),
+            "country" -> (if (subscriber.country == null) "" else subscriber.country),
+            "apps" -> (if (subscriber.apps == null) "" else subscriber.apps))
+          Ok(userString)
+        } else {
+          Logger.info("in here 123")
+          if (userDao.lastError == Constants.ErrorCode.ERROR_SUCCESS)
+            Ok(Json.obj())
+          else
+            Ok(Json.obj("status" -> userDao.lastError))
+        }
+
       } else {
-        if (userDao.lastError == Constants.ErrorCode.ERROR_SUCCESS)
-          Ok(Json.obj())
-        else
-          Ok(Json.obj("status" -> userDao.lastError))
+          Logger.info("in here 3")
+          if (userDao.lastError == Constants.ErrorCode.ERROR_SUCCESS)
+             Ok(Json.obj())
+          else
+             Ok(Json.obj("status" -> userDao.lastError))
       }
+
     } catch {
       case e: Exception => {
         println("exception = %s" format e)
@@ -156,31 +185,36 @@ class UserController (implicit inj: Injector) extends Controller with Injectable
 
       val userName = (json.getOrElse(null) \ "user_name").asOpt[String].getOrElse(null)
       if (userName != null) {
+        Logger.info("in here 1")
         val subscribers: List[SubscriberModel] = userDao.getInfoByUsername(userName)
         if (subscribers != null) {
-//          val userString = Json.obj(
-//            "uid" -> (if (subscriber.uid == null) "" else subscriber.uid),
-//            "user_name" -> userName,
-//            "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
-//            "os" -> (if (subscriber.os == null) "" else subscriber.os),
-//            "model" -> (if (subscriber.model == null) "" else subscriber.model),
-//            "phone" -> (if (subscriber.phone == null) "" else subscriber.phone),
-//            "email" -> (if (subscriber.email == null) "" else subscriber.email),
-//            "fb_id" -> (if (subscriber.fbId == null) "" else subscriber.fbId),
-//            "state" -> (if (subscriber.state == null) "" else subscriber.state),
-//            "region" -> (if (subscriber.region == null) "" else subscriber.region),
-//            "country" -> (if (subscriber.country == null) "" else subscriber.country),
-//            "apps" -> (if (subscriber.apps == null) "" else subscriber.apps))
+          Logger.info("in here 2")
+          val subscriber = subscribers(0)
+          val userString = Json.obj(
+            "uid" -> (if (subscriber.uid == null) "" else subscriber.uid),
+            "user_name" -> userName,
+            "platform" -> (if (subscriber.platform == null) "" else subscriber.platform),
+            "os" -> (if (subscriber.os == null) "" else subscriber.os),
+            "model" -> (if (subscriber.model == null) "" else subscriber.model),
+            "phone" -> (if (subscriber.phone == null) "" else subscriber.phone),
+            "email" -> (if (subscriber.email == null) "" else subscriber.email),
+            "fb_id" -> (if (subscriber.fbId == null) "" else subscriber.fbId),
+            "state" -> (if (subscriber.state == null) "" else subscriber.state),
+            "region" -> (if (subscriber.region == null) "" else subscriber.region),
+            "country" -> (if (subscriber.country == null) "" else subscriber.country),
+            "apps" -> (if (subscriber.apps == null) "" else subscriber.apps))
 
-//          Ok(userString)
-          Ok(Json.toJson(subscribers))
+          Ok(userString)
+          //Ok(Json.toJson(subscribers))
         } else {
-          if (userDao.lastError == Constants.ErrorCode.ERROR_SUCCESS)
-            Ok(Json.obj())
-          else
-            Ok(Json.obj("status" -> userDao.lastError))
+           Logger.info("in here 3")
+           if (userDao.lastError == Constants.ErrorCode.ERROR_SUCCESS)
+             Ok(Json.obj())
+           else
+             Ok(Json.obj("status" -> userDao.lastError))
         }
       } else {
+        Logger.info("in here 4")
         Ok(StaticVariables.InputErrorStatus)
       }
     } catch {

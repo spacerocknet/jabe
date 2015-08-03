@@ -25,8 +25,9 @@ POST        /v1/cat/update                    @controllers.CategoryController.up
 #---------------------------------------------------------------------------------------------
 # User
 POST        /v1/user/byname                   @controllers.UserController.getUserInfoByUsername
-GET         /v1/user/byuid/:uid               @controllers.UserController.getUserInfoByUID(uid: String)
+POST        /v1/user/byuid                    @controllers.UserController.getUserInfoByUID
 GET         /v1/user/all                      @controllers.UserController.getAllUser
+GET         /v1/user/delall                   @controllers.UserController.delAllUser
 POST        /v1/user/addnoinfo                @controllers.UserController.addUserWithoutInfo
 POST        /v1/user/updateinfo               @controllers.UserController.updateUserInfo
 #---------------------------------------------------------------------------------------------

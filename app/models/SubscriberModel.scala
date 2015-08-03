@@ -9,22 +9,22 @@ case class SubscriberModel(platform: String, os: String, model: String,
     """
       |{
       |"uid" : "%s",
-      |"first-name" : "%s",
-      |"last-name" : "%s",
-      |"username" : "%s",
+      |"first_name" : "%s",
+      |"last_name" : "%s",
+      |"user_name" : "%s",
       |"email" : "%s",
-      |"fbid" : "%s",
+      |"fb_id" : "%s",
       |"state" : "%s",
       |"region" : "%s",
       |"apps" : "%s",
-      |"registered-time" : %d,
-      |"last-seen" : %d,
+      |"registered_time" : %d,
+      |"last_seen" : %d,
       |"platform" : "%s",
       |"os" : "%s",
       |"model" : "%s",
       |"phone" : "%s",
-      |"device-uuid" : "%s",
-      |"device-set" : %s
+      |"device_uuid" : "%s",
+      |"device_set" : %s
       |}
     """.stripMargin
 
@@ -68,13 +68,14 @@ case class SubscriberModel(platform: String, os: String, model: String,
            apps: String) = {
      this(platform, os, model, phone, deviceUuid)
      this.uid = uid
-     this.email = email
-     this.fbId = fbId
-     this.state = state
-     this.region = region
-     this.country = country
-     this.apps = apps
+     this.email = if (email == null) "" else email
+     this.fbId = if (fbId == null) "" else fbId
+     this.state = if (state == null) "" else state
+     this.region = if (region == null) "" else region
+     this.country = if (country == null) "" else country
+     this.apps = if (apps == null) "" else apps
      this.lastSeen = System.currentTimeMillis()
+     System.out.println("justin 111aaa")
   }
     
 }

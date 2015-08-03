@@ -29,6 +29,7 @@ trait UserData {
   def getAllUsers(): List[SubscriberModel]
   def changeDevice(uid: String, platform: String, os: String, model: String,
                    phone: String, deviceUuid: String): Boolean
+  def delAllUsers(): Boolean
   def lastError: Int
 }
 
@@ -92,18 +93,59 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     }
     val bs: BoundStatement = new BoundStatement(ps)
     val time: Long = System.currentTimeMillis()
+
     bs.setString("uid", uid)
-    bs.setString("user_name", userName)
-    bs.setString("first_name", firstName)
-    bs.setString("last_name", lastName)
-    bs.setString("email", email)
-    bs.setString("fb_id", fbId)
-    bs.setString("state", locState)
-    bs.setString("region", locRegion)
-    bs.setString("country", locCountry)
-    bs.setString("apps", appName)
+
+    if (userName != null)
+      bs.setString("user_name", userName)
+    else
+      bs.setString("user_name", "")
+
+    if (firstName != null)
+      bs.setString("first_name", firstName)
+    else
+      bs.setString("first_name", "")
+
+    if (lastName != null)
+      bs.setString("last_name", lastName)
+    else
+      bs.setString("last_name", "")
+
+    if (email != null)
+      bs.setString("email", email)
+    else
+      bs.setString("email", "")
+
+    if (fbId != null)
+      bs.setString("fb_id", fbId)
+    else
+      bs.setString("fb_id", "")
+
+    if (locState != null)
+      bs.setString("state", locState)
+    else
+      bs.setString("state", "")
+
+    if (locRegion != null)
+      bs.setString("region", locRegion)
+    else
+      bs.setString("region", locRegion)
+
+    if (locCountry != null)
+       bs.setString("country", locCountry)
+    else
+      bs.setString("country", locCountry)
+
+    if (appName != null)
+      bs.setString("apps", appName)
+    else
+      bs.setString("apps", "")
+
+
     bs.setLong("last_seen", time)
+
     bs.setLong("registered_time", time)
+
     if (sessionManager.execute(bs) != null) {
       if (updateUidName(uid, userName)) {
         _lastError = Constants.ErrorCode.ERROR_SUCCESS
@@ -223,13 +265,25 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
       val row: Row = result.one()
       if (row != null) {
-        val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"), row.getString("platform"),
-          row.getString("os"), row.getString("model"),
-          row.getString("phone"), row.getString("device_uuid"), row.getString("email"),
-          row.getString("fb_id"), row.getString("state"),
-          row.getString("region"), row.getString("country"), row.getString("apps"))
-        subscriber.userName = row.getString("user_name")
+        Logger.info("Justin here 1")
+        Logger.info(row.toString())
+        val subscriber: SubscriberModel = new SubscriberModel(row.getString("uid"),
+                                               row.getString("platform"),
+                                               row.getString("os"),
+                                               row.getString("model"),
+                                               row.getString("phone"),
+                                               row.getString("device_uuid"),
+                                               row.getString("email"),
+                                               row.getString("fb_id"),
+                                               row.getString("state"),
+                                               row.getString("region"),
+                                               row.getString("country"),
+                                               row.getString("apps"))
+
+
+        subscriber.userName = if (row.getString("user_name") == null) "" else row.getString("user_name")
         subscriber.deviceSet = row.getSet("device_list", classOf[String]).toSet
+        Logger.info(subscriber.toString())
         subscriber
       } else {
         null
@@ -256,12 +310,16 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     bs.setString("user_name", userName)
     val result: ResultSet = sessionManager.execute(bs)
     if (result != null) {
+      Logger.info("Minh in 1")
       _lastError = Constants.ErrorCode.ERROR_SUCCESS
       val row: Row = result.one()
       if (row != null) {
+        Logger.info("Minh in 2")
         val l: ListBuffer[SubscriberModel] = new ListBuffer[SubscriberModel]
         val uids: util.Set[String] = row.getSet("uids", classOf[String])
         if (uids != null) {
+          Logger.info("Minh in 3")
+          Logger.info("uids = " + uids)
           for (uid <- uids) {
             val subscriber: SubscriberModel = getInfoByUID(uid)
             if (subscriber != null)
@@ -313,6 +371,36 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
       null
     }
   }
+
+
+  def delAllUsers(): Boolean = {
+    var ps: PreparedStatement = pStatements.getOrElse("DeleteAllUsers", null)
+    var bs: BoundStatement = new BoundStatement(ps)
+    sessionManager.execute(bs)
+
+    ps = pStatements.getOrElse("DeleteAllUsersUsername", null)
+    bs = new BoundStatement(ps)
+    sessionManager.execute(bs)
+
+    ps = pStatements.getOrElse("DeleteAllUsersGameSessions", null)
+    bs = new BoundStatement(ps)
+    sessionManager.execute(bs)
+
+    ps = pStatements.getOrElse("DeleteAllUserGameProfile", null)
+    bs = new BoundStatement(ps)
+    sessionManager.execute(bs)
+
+    ps = pStatements.getOrElse("DeleteAllOpenGameSessions", null)
+    bs = new BoundStatement(ps)
+    sessionManager.execute(bs)
+
+    ps = pStatements.getOrElse("DeleteAllGameSessions", null)
+    bs = new BoundStatement(ps)
+    sessionManager.execute(bs)
+
+    true
+  }
+
 
   private def updateUidName(uid: String, uname: String): Boolean = {
       val ps: PreparedStatement = pStatements.getOrElse("UpdateUidNameI", null)
@@ -392,11 +480,56 @@ class UserDataDAO (implicit inj: Injector) extends UserData with Injectable {
     _lastError = sessionManager.lastError
 
     // Get all users
-
     ps = sessionManager.prepare("SELECT * FROM spacerock.users ALLOW FILTERING;")
     if (ps != null)
       pStatements.put("GetAllUsers", ps)
     else
     _lastError = sessionManager.lastError
+
+    //Delete all users
+    ps = sessionManager.prepare("truncate spacerock.users")
+    if (ps != null)
+      pStatements.put("DeleteAllUsers", ps)
+    else
+      _lastError = sessionManager.lastError
+
+
+    //Delete all users_username
+    ps = sessionManager.prepare("truncate spacerock.user_username")
+    if (ps != null)
+      pStatements.put("DeleteAllUsersUsername", ps)
+    else
+      _lastError = sessionManager.lastError
+
+    //Delete all user_game_sessions
+    ps = sessionManager.prepare("truncate spacerock.user_game_sessions")
+    if (ps != null)
+      pStatements.put("DeleteAllUsersGameSessions", ps)
+    else
+      _lastError = sessionManager.lastError
+
+
+    //Delete all user_game_profile
+    ps = sessionManager.prepare("truncate spacerock.user_game_profile")
+    if (ps != null)
+      pStatements.put("DeleteAllUserGameProfile", ps)
+    else
+      _lastError = sessionManager.lastError
+
+
+    //Delete all open_game_sessions
+    ps = sessionManager.prepare("truncate spacerock.open_game_sessions")
+    if (ps != null)
+      pStatements.put("DeleteAllOpenGameSessions", ps)
+    else
+      _lastError = sessionManager.lastError
+
+
+    //Delete all game_sessions
+    ps = sessionManager.prepare("truncate spacerock.game_sessions")
+    if (ps != null)
+      pStatements.put("DeleteAllGameSessions", ps)
+    else
+      _lastError = sessionManager.lastError
   }
 }
